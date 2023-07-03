@@ -3,7 +3,7 @@
   <h3 align="center">Karma</h3>
 </p>
 
-Karma is a key-value database that operates on a cluster of trees, in which each tree stores a set of counters. If you need to store different counters of positive values with a granularity of one day, get the sum of values for a certain date range or the sum of all values, then Karma is probably right for you.
+Karma is a ~key-value~ key-counter database that operates on a cluster of trees, in which each tree stores a set of counters. If you need to store different counters of positive values with a granularity of one day, get the sum of values for a certain date range or the sum of all values, then Karma is probably right for you.
 
 In simple terms, Karma is a partitioned hash tables for fast counter lookup wrapped in TCP Server.
 
