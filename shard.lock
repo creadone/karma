@@ -1,0 +1,10 @@
+version: 2.0
+shards:
+  counter_tree:
+    git: https://github.com/creadone/counter_tree.git
+    version: 1.0.1
+
+  msgpack:
+    git: https://github.com/crystal-community/msgpack-crystal.git
+    version: 1.3.4
+

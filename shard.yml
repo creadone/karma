@@ -1,0 +1,19 @@
+name: karma
+version: 0.1.0
+
+authors:
+  - Sergey Fedorov <creadone@gmail.com>
+
+targets:
+  karma:
+    main: src/karma.cr
+
+crystal: 1.8.2
+
+license: MIT
+
+dependencies:
+  msgpack:
+    github: crystal-community/msgpack-crystal
+  counter_tree:
+    github: creadone/counter_tree
