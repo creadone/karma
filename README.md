@@ -22,7 +22,7 @@ Requirements:
 Steps:
 
 * Clone the repo: git clone https://github.com/creadone/karma
-* Switch to repo-directory: cd bojack
+* Switch to repo-directory: cd karma
 * Build: `shards build --release`
 
 ## Configuration
