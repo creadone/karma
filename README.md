@@ -88,7 +88,7 @@ Karma.tree('articles').sum(key: 12345, time_from: 20230701, time_to: 20230703)
 
 ## Performance
 
-For the Ruby client performing 1K requests on localhost takes on average about 50 seconds. ~ 20 000 requests can be done in 1 second.
+For the Ruby client performing 1KK requests on localhost takes on average about 50 seconds. ~ 20 000 requests can be done in 1 second.
 
 ## Development
 
