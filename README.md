@@ -3,7 +3,7 @@
   <h3 align="center">Karma</h3>
 </p>
 
-Karma is a key-value database that operates on a cluster of trees, in which each tree stores a set of counters. If you need to store different counters of positive values with a granularity of one day, get the sum of values for a certain date range or the sum of all values, then Karma is probably right for you.
+Karma is a ~key-value~ key-counter database that operates on a cluster of trees, in which each tree stores a set of counters. If you need to store different counters of positive values with a granularity of one day, get the sum of values for a certain date range or the sum of all values, then Karma is probably right for you.
 
 In simple terms, Karma is a partitioned hash tables for fast counter lookup wrapped in TCP Server.
 
@@ -22,7 +22,7 @@ Requirements:
 Steps:
 
 * Clone the repo: git clone https://github.com/creadone/karma
-* Switch to repo-directory: cd bojack
+* Switch to repo-directory: cd karma
 * Build: `shards build --release`
 
 ## Configuration
@@ -88,7 +88,7 @@ Karma.tree('articles').sum(key: 12345, time_from: 20230701, time_to: 20230703)
 
 ## Performance
 
-For the Ruby client performing 1K requests on localhost takes on average about 50 seconds. ~ 20 000 requests can be done in 1 second.
+For the Ruby client performing 1KK requests on localhost takes on average about 50 seconds. ~ 20 000 requests can be done in 1 second.
 
 ## Clients
 
