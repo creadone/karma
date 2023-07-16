@@ -8,7 +8,7 @@ module Karma
     def handle(client)
       while message = client.gets
         if answer = Commands.call(message, @cluster)
-          client.puts(answer)
+          client.send(answer)
         end
       end
     end
