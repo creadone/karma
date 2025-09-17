@@ -2,7 +2,7 @@ require "../src/config"
 require "../src/cluster"
 require "../src/backup"
 
-dump_dir = "/Users/sf/Dev/tmp/karma/.dumps_eval"
+dump_dir = "/tmp/.dumps_eval"
 Karma.configure { |c| c.dump_dir = dump_dir }
 Dir.mkdir_p(dump_dir)
 
