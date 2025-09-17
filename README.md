@@ -17,7 +17,7 @@ Karma has almost full functionality, but is in the early stage of development wi
 
 Requirements:
 
-* The latest version of Crystal (1.8.2)
+* The latest version of Crystal (1.17.1)
 
 Steps:
 

@@ -13,5 +13,7 @@ require "./launcher"
 
 module Karma
   LAUNCHER = Launcher.new
-  LAUNCHER.run!
+  if PROGRAM_NAME == __FILE__
+    LAUNCHER.run!
+  end
 end

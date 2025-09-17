@@ -16,6 +16,9 @@ module Karma
 
     def self.dump(cluster, file_path, tree_name)
       if cluster.trees.has_key?(tree_name)
+        # Ensure destination directory exists
+        dir_path = File.dirname(file_path)
+        Dir.mkdir_p(dir_path) unless Dir.exists?(dir_path)
         File.open(file_path, "wb") do |io|
           io.write cluster.dump(tree_name)
         end

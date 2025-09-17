@@ -3,7 +3,7 @@ require "option_parser"
 module Karma
   module Cli
 
-    parser = OptionParser.parse do |parser|
+    parser = OptionParser.new do |parser|
       parser.banner = "Usage: karma [arguments]"
 
       parser.on("-b host", "--bind=host", "Host to bind (default: #{Karma.config.host})") do |host|

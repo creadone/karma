@@ -50,7 +50,8 @@ module Karma
       cluster = Cluster.new
 
       full_path = File.expand_path(dump_dir)
-      dumps = Dir.glob(full_path, "*.tree").select do |path|
+      pattern = File.join(full_path, "*.tree")
+      dumps = Dir.glob(pattern).select do |path|
         File.file?(path)
       end
       return cluster if dumps.size == 0
@@ -63,7 +64,7 @@ module Karma
         group.sort! do |a, b|
           a.split("_").first.to_i32 <=> b.split("_").first.to_i32
         end
-        dump_path = File.join(full_path, group.last)
+        dump_path = group.last
         Karma::Backup.load(cluster, dump_path, tree_name)
       end
 

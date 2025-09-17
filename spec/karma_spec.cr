@@ -1,9 +1,7 @@
 require "./spec_helper"
 
 describe Karma do
-  # TODO: Write tests
-
-  it "works" do
-    false.should eq(true)
+  it "has a version" do
+    Karma::VERSION.should_not be_empty
   end
 end

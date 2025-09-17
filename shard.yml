@@ -8,7 +8,7 @@ targets:
   karma:
     main: src/karma.cr
 
-crystal: 1.8.2
+crystal: 1.17.1
 
 license: MIT
 
