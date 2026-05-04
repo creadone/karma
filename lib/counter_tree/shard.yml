@@ -1,0 +1,16 @@
+name: counter_tree
+version: 1.0.1
+
+authors:
+  - Sergey Fedorov <creadone@gmail.com>
+
+description: |
+  A sectioned hash table for storing counters that allow you to store values on a specific date and fetch as a sum or slice between two timestamps.
+
+crystal: 1.8.0
+
+license: MIT
+
+dependencies:
+  msgpack:
+    github: crystal-community/msgpack-crystal
