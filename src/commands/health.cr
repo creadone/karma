@@ -1,8 +1,8 @@
 module Karma
   module Commands
-    module Dumps
+    module Health
       def self.call(directive, cluster)
-        Karma::Backup.dumps(Karma.config.dump_dir)
+        Karma::Operations.health
       end
     end
   end

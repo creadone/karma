@@ -2,7 +2,6 @@ require "counter_tree"
 
 module Karma
   class Cluster
-
     alias ClusterType = Hash(String, CounterTree::Tree)
     getter trees : ClusterType
 
@@ -10,9 +9,19 @@ module Karma
       @trees = ClusterType.new
     end
 
-    def each_tree : Nil
+    def each_tree(&) : Nil
       @trees.each do |key, tree|
         yield key, tree
+      end
+    end
+
+    def tree_count : Int32
+      @trees.size
+    end
+
+    def key_count : Int32
+      @trees.values.sum do |tree|
+        tree.branches.sum { |branch| branch.size }
       end
     end
 
@@ -24,8 +33,12 @@ module Karma
       @trees.delete(name) ? true : false
     end
 
-    def pick(name : String) : Nil
+    def pick(name : String, &) : Nil
       yield find_or_create(name)
+    end
+
+    def get(name : String) : CounterTree::Tree
+      @trees[name]? || raise Karma::Error.new("not_found", "Tree \"#{name}\" not found")
     end
 
     def dump(name : String) : Slice(UInt8)
@@ -44,6 +57,8 @@ module Karma
         dump_path = File.join(dump_dir, dump_name)
         Karma::Backup.dump(self, dump_path, tree_name)
       end
+      Karma::Wal.truncate
+      Karma::Backup.prune(dump_dir, Karma.config.dump_retention_per_tree)
     end
 
     def self.restore(dump_dir) : Cluster
@@ -57,17 +72,23 @@ module Karma
       return cluster if dumps.size == 0
 
       tree_groups = dumps.group_by do |file_name|
-        File.basename(file_name.split("_").last, ".tree")
+        Karma::Backup.dump_tree_name(file_name)
       end
 
       tree_groups.each do |tree_name, group|
         group.sort! do |a, b|
-          a.split("_").first.to_i32 <=> b.split("_").first.to_i32
+          Karma::Backup.dump_timestamp(a) <=> Karma::Backup.dump_timestamp(b)
         end
         dump_path = group.last
         Karma::Backup.load(cluster, dump_path, tree_name)
       end
 
+      cluster
+    end
+
+    def self.restore_with_wal(dump_dir) : Cluster
+      cluster = restore(dump_dir)
+      Karma::Wal.replay(cluster, dump_dir)
       cluster
     end
 
@@ -77,6 +98,5 @@ module Karma
       end
       @trees[name]
     end
-
   end
 end

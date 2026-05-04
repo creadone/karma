@@ -6,7 +6,7 @@ authors:
 
 targets:
   karma:
-    main: src/karma.cr
+    main: src/main.cr
 
 crystal: 1.17.1
 

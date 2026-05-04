@@ -1,8 +1,8 @@
 module Karma
   module Commands
-    module Dumps
+    module Verify
       def self.call(directive, cluster)
-        Karma::Backup.dumps(Karma.config.dump_dir)
+        Karma::Operations.verify_restore
       end
     end
   end
