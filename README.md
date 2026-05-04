@@ -37,6 +37,15 @@ Usage: karma [arguments]
     -d path, --directory=path  Directory for storing and loading dumps (default: .)
     -r flag, --restore=flag    Load last state from dumps (default: true)
     -n flag, --nodelay=flag    Disable Nagle's algorithm (default: true)
+    -w flag, --wal=flag        Enable write-ahead log (default: true)
+    --wal-fsync=flag           Fsync write-ahead log entries (default: true)
+    --max-request-bytes=bytes  Maximum request line size (default: 4096)
+    --read-timeout=seconds     Client read timeout in seconds (default: 5)
+    --write-timeout=seconds    Client write timeout in seconds (default: 5)
+    --auth-token=token         Require token field in client commands
+    --dump-retention-per-tree=count
+                              Dumps to keep per tree after dump_all (default: 5)
+    --log=flag                 Enable structured JSON logs (default: true)
     -h, --help                 Show this help
 ```
 
@@ -79,12 +88,21 @@ Karma.tree('articles').sum(key: 12345, time_from: 20230701, time_to: 20230703)
 
 ```
 
+Operational commands:
+
+* `health` - returns service health and uptime.
+* `stats` - returns tree/key counts, dump count, WAL size and heap size.
+* `metrics` - returns Prometheus-style metrics text.
+* `verify` - verifies that snapshots and WAL can be restored.
+
 ## Maintenance
 
 * Maintenance of Karma by and large comes down to regular creation of tree dumps.
+* Write-ahead log is enabled by default and stores mutating commands in `karma.wal`.
 * By default, if Karma receives SIGINT, it dumps all trees to the directory specified at startup.
-* When application starts, if restore flag is specified, Karma tries to find last dumps in specified directory and load all trees into memory.
+* When application starts, if restore flag is specified, Karma tries to find last dumps in specified directory, load all trees into memory and replay WAL.
 * If Karma receives SIGUSR1, it resets all trees from memory to dumps and continues work. This is useful if you want to make dumps on schedule from cron.
+* `dump_all` writes atomic snapshots, truncates WAL after successful snapshotting and prunes old dumps according to `--dump-retention-per-tree`.
 
 ## Performance
 
