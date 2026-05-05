@@ -597,6 +597,7 @@ Metrics include:
 * `karma_keys`
 * `karma_dumps`
 * `karma_wal_bytes`
+* `karma_wal_current_lsn`
 * `karma_memory_bytes`
 * `karma_commands_total`
 * `karma_errors_total`
@@ -667,7 +668,17 @@ socket.close
 Karma uses two persistence mechanisms:
 
 * snapshots: MessagePack `.tree` files, one per tree;
-* WAL: newline-delimited JSON commands in `karma.wal`.
+* WAL: newline-delimited JSON entries in `karma.wal`.
+
+New WAL lines use an LSN envelope:
+
+```json
+{"v":2,"lsn":1,"entry":{"v":2,"op":"counter.increment","tree":"links","key":42,"date":20260505,"value":1}}
+```
+
+The current WAL LSN is persisted in `karma.wal.lsn`. WAL replay accepts both
+the LSN envelope and older WAL lines where the command JSON is written directly
+at the top level.
 
 Recovery checkpoint metadata is stored separately in `recovery.json` in the
 same directory. It records external source positions such as ClickHouse export

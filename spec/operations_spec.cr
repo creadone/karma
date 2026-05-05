@@ -22,6 +22,7 @@ describe "operations commands" do
     parsed["response"]["trees"].as_i.should eq(1)
     parsed["response"]["keys"].as_i.should eq(1)
     parsed["response"]["wal_bytes"].as_i.should be > 0
+    parsed["response"]["wal_current_lsn"].as_i.should be > 0
     parsed["response"]["memory_bytes"].as_i.should be > 0
     parsed["response"]["command_count"].as_i.should be > 0
     parsed["response"]["latency_ms_last"].as_f.should be >= 0.0
@@ -42,6 +43,7 @@ describe "operations commands" do
     metrics = parsed["response"].as_s
     metrics.should contain("karma_uptime_seconds")
     metrics.should contain("karma_trees")
+    metrics.should contain("karma_wal_current_lsn")
     metrics.should contain("karma_memory_bytes")
     metrics.should contain("karma_commands_total")
     metrics.should contain("karma_errors_total")

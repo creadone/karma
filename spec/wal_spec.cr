@@ -14,10 +14,28 @@ describe Karma::Wal do
 
     lines = File.read_lines(Karma::Wal.path(dump_dir))
     lines.size.should eq(1)
-    lines.first.should contain("\"v\":2")
-    lines.first.should contain("\"op\":\"counter.increment\"")
-    lines.first.should contain("\"date\"")
-    lines.first.should contain("\"value\":1")
+    entry = JSON.parse(lines.first)
+    entry["v"].as_i.should eq(2)
+    entry["lsn"].as_i.should eq(1)
+    entry["entry"]["v"].as_i.should eq(2)
+    entry["entry"]["op"].as_s.should eq("counter.increment")
+    entry["entry"].as_h.has_key?("date").should be_true
+    entry["entry"]["value"].as_i.should eq(1)
+    File.read(Karma::Wal.lsn_path(dump_dir)).strip.should eq("1")
+  end
+
+  it "increments and persists WAL LSNs" do
+    dump_dir = File.expand_path(".spec_wal_lsn_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 43_u64}.to_json, cluster)
+
+    lines = File.read_lines(Karma::Wal.path(dump_dir)).map { |line| JSON.parse(line) }
+    lines.map { |line| line["lsn"].as_i }.should eq([1, 2])
+    Karma::Wal.current_lsn(dump_dir).should eq(2_u64)
+    File.read(Karma::Wal.lsn_path(dump_dir)).strip.should eq("2")
   end
 
   it "replays WAL after snapshot restore" do
@@ -52,8 +70,26 @@ describe Karma::Wal do
     cluster.dump_all
 
     File.read(Karma::Wal.path(dump_dir)).should be_empty
+    File.read(Karma::Wal.lsn_path(dump_dir)).strip.should eq("1")
     restored = Karma::Cluster.restore_with_wal(dump_dir)
     restored.get("articles").sum(42_u64).should eq(1_u64)
+  end
+
+  it "replays legacy v2 WAL entries without LSN envelope" do
+    dump_dir = File.expand_path(".spec_wal_legacy_v2_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    Dir.mkdir_p(dump_dir)
+    File.write(Karma::Wal.path(dump_dir), {
+      v:     2,
+      op:    "counter.increment",
+      tree:  "articles",
+      key:   42_u64,
+      value: 3_u64,
+    }.to_json + "\n")
+
+    restored = Karma::Cluster.restore_with_wal(dump_dir)
+
+    restored.get("articles").sum(42_u64).should eq(3_u64)
   end
 
   it "can disable WAL persistence" do

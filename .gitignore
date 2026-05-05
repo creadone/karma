@@ -8,3 +8,4 @@
 *.dwarf
 *.tree
 *.wal
+*.lsn

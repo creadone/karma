@@ -12,6 +12,8 @@ module Karma
         io << "karma_dumps #{Karma::Backup.dumps(Karma.config.dump_dir).size}\n"
         io << "# TYPE karma_wal_bytes gauge\n"
         io << "karma_wal_bytes #{wal_bytes}\n"
+        io << "# TYPE karma_wal_current_lsn gauge\n"
+        io << "karma_wal_current_lsn #{Karma::Wal.current_lsn}\n"
         io << "# TYPE karma_memory_bytes gauge\n"
         io << "karma_memory_bytes #{GC.stats.heap_size}\n"
         io << "# TYPE karma_commands_total counter\n"

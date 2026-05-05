@@ -17,6 +17,7 @@ module Karma
         dump_count:                         Karma::Backup.dumps(Karma.config.dump_dir).size,
         wal_enabled:                        Karma::Wal.enabled?,
         wal_bytes:                          wal_bytes,
+        wal_current_lsn:                    Karma::Wal.current_lsn,
         memory_bytes:                       GC.stats.heap_size,
         command_count:                      command_count,
         error_count:                        error_count,

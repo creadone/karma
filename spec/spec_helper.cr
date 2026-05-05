@@ -4,6 +4,9 @@ require "../src/karma"
 Karma.configure { |c| c.log = false }
 
 Spec.before_each do
+  Karma.configure do |c|
+    c.dump_dir = File.expand_path(".spec_default_#{Time.local.to_unix_ms}_#{Random.rand(1_000_000)}")
+  end
   Karma::Ingest.reset!
   Karma::Recovery.reset!
 end

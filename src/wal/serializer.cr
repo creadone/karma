@@ -2,12 +2,26 @@ require "json"
 
 module Karma
   module Wal
-    private def self.serialize(directive : Commands::Directive) : String
+    private def self.serialize(directive : Commands::Directive, lsn : UInt64? = nil) : String
       JSON.build do |json|
-        json.object do
-          json.field "v", 2
-          write_operation(json, directive)
+        if lsn
+          json.object do
+            json.field "v", 2
+            json.field "lsn", lsn
+            json.field "entry" do
+              write_command(json, directive)
+            end
+          end
+        else
+          write_command(json, directive)
         end
+      end
+    end
+
+    private def self.write_command(json : JSON::Builder, directive : Commands::Directive) : Nil
+      json.object do
+        json.field "v", 2
+        write_operation(json, directive)
       end
     end
 
