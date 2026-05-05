@@ -192,4 +192,32 @@ describe Karma::Cli do
       Karma::Cli.parse!(["--wal=maybe"])
     end
   end
+
+  it "validates final configuration after environment and command line options" do
+    clear_cli_env
+
+    expect_raises(Karma::Error, "Invalid configuration: port must be between 1 and 65535") do
+      Karma::Cli.parse!(["--port=0"])
+    end
+  ensure
+    Karma.configure do |c|
+      c.host = "0.0.0.0"
+      c.port = 8080
+      c.dump_dir = "."
+      c.restore = true
+      c.tcp_nodelay = true
+      c.wal = true
+      c.wal_fsync = true
+      c.max_request_bytes = 4096
+      c.max_response_bytes = 1_048_576
+      c.read_timeout_seconds = 5
+      c.write_timeout_seconds = 5
+      c.query_timeout_ms = 1_000
+      c.shutdown_timeout_seconds = 5
+      c.dump_retention_per_tree = 5
+      c.auth_token = nil
+      c.read_auth_token = nil
+      c.log = false
+    end
+  end
 end

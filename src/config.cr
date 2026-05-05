@@ -40,6 +40,19 @@ module Karma
       @log = bool_env("KARMA_LOG", @log)
     end
 
+    def validate! : Nil
+      raise_validation("host must not be empty") if @host.empty?
+      raise_validation("port must be between 1 and 65535") unless (1..65_535).includes?(@port)
+      raise_validation("dump_dir must not be empty") if @dump_dir.empty?
+      raise_validation("max_request_bytes must be greater than 0") unless @max_request_bytes > 0
+      raise_validation("max_response_bytes must be greater than or equal to 0") unless @max_response_bytes >= 0
+      raise_validation("read_timeout_seconds must be greater than or equal to 0") unless @read_timeout_seconds >= 0
+      raise_validation("write_timeout_seconds must be greater than or equal to 0") unless @write_timeout_seconds >= 0
+      raise_validation("query_timeout_ms must be greater than or equal to 0") unless @query_timeout_ms >= 0
+      raise_validation("shutdown_timeout_seconds must be greater than or equal to 0") unless @shutdown_timeout_seconds >= 0
+      raise_validation("dump_retention_per_tree must be greater than or equal to 0") unless @dump_retention_per_tree >= 0
+    end
+
     private def string_env(name : String, fallback : String) : String
       ENV[name]? || fallback
     end
@@ -70,6 +83,10 @@ module Karma
       else
         raise Karma::Error.new("validation_error", "Environment variable #{name} must be true or false")
       end
+    end
+
+    private def raise_validation(message : String) : NoReturn
+      raise Karma::Error.new("validation_error", "Invalid configuration: #{message}")
     end
   end
 

@@ -89,6 +89,7 @@ module Karma
       end
 
       parser.parse(args)
+      Karma.config.validate!
     end
 
     private def self.bool_flag(value : String, option : String) : Bool

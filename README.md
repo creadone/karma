@@ -155,6 +155,9 @@ Options:
 ```
 
 Boolean flags use `true` or `false`.
+Numeric timeout values use `0` to disable the corresponding timeout. The
+request byte limit must be greater than `0`; the response byte limit may be `0`
+to disable the response limit.
 
 Environment variables:
 
