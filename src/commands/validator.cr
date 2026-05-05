@@ -4,6 +4,8 @@ module Karma
       case directive.command
       when "ping", "trees", "dumps", "dump_all", "health", "stats", "metrics", "verify"
       when "replication_status"
+      when "replication_entries"
+        require_after_lsn(directive)
       when "snapshot_info"
       when "create", "drop", "dump", "load", "reset"
         require_tree_name(directive)

@@ -27,5 +27,6 @@ end
 
 require "./wal/serializer"
 require "./wal/lsn"
+require "./wal/entry"
 require "./wal/store"
 require "./wal/replay"

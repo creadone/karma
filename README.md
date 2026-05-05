@@ -591,6 +591,7 @@ Inspect replication bootstrap state:
 
 ```json
 {"v":2,"op":"replication.status"}
+{"v":2,"op":"replication.entries","after_lsn":120,"limit":1000}
 ```
 
 ### Legacy v1

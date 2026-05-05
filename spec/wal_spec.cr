@@ -38,6 +38,37 @@ describe Karma::Wal do
     File.read(Karma::Wal.lsn_path(dump_dir)).strip.should eq("2")
   end
 
+  it "reads WAL entries after LSN with limit" do
+    dump_dir = File.expand_path(".spec_wal_entries_after_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 43_u64}.to_json, cluster)
+
+    entries = Karma::Wal.entries_after(1_u64, 1, dump_dir)
+
+    entries.size.should eq(1)
+    entries.first.lsn.should eq(2_u64)
+    entries.first.entry["op"].as_s.should eq("counter.increment")
+    entries.first.entry["key"].as_i.should eq(42)
+  end
+
+  it "skips legacy WAL entries when reading entries after LSN" do
+    dump_dir = File.expand_path(".spec_wal_entries_legacy_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    Dir.mkdir_p(dump_dir)
+    File.write(Karma::Wal.path(dump_dir), {
+      v:    2,
+      op:   "counter.increment",
+      tree: "articles",
+      key:  42_u64,
+    }.to_json + "\n")
+
+    Karma::Wal.entries_after(0_u64, 100, dump_dir).should be_empty
+  end
+
   it "replays WAL after snapshot restore" do
     dump_dir = File.expand_path(".spec_wal_replay_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }

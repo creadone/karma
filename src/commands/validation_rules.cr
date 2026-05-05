@@ -92,6 +92,11 @@ module Karma
       raise Karma::Error.new("validation_error", "Field event_id must not be empty") if directive.event_id.try(&.empty?)
     end
 
+    private def self.require_after_lsn(directive : Directive) : Nil
+      raise Karma::Error.new("validation_error", "Field after_lsn is required") if directive.after_lsn.nil?
+      require_limit(directive, default: 1_000, max: 10_000)
+    end
+
     private def self.require_positive_value(directive : Directive) : Nil
       return if directive.value.as(UInt64) > 0_u64
 

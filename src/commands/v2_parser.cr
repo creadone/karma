@@ -23,6 +23,8 @@ module Karma
         Directive.new("recovery_status", source: optional_source_from(object), token: token, protocol_version: 2_u32)
       when "replication.status"
         Directive.new("replication_status", token: token, protocol_version: 2_u32)
+      when "replication.entries"
+        Directive.new("replication_entries", after_lsn: after_lsn_from(object), limit: limit_from(object), token: token, protocol_version: 2_u32)
       when "snapshot.info"
         Directive.new("snapshot_info", token: token, protocol_version: 2_u32)
       when "tree.create"

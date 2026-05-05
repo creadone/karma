@@ -21,6 +21,7 @@ module Karma
       property granularity : String?
       property limit : Int32?
       property cursor : UInt64?
+      property after_lsn : UInt64?
       property checked_points : Int64?
       property mismatch_count : Int64?
       property absolute_drift : Int64?
@@ -47,6 +48,7 @@ module Karma
         @granularity : String? = nil,
         @limit : Int32? = nil,
         @cursor : UInt64? = nil,
+        @after_lsn : UInt64? = nil,
         @checked_points : Int64? = nil,
         @mismatch_count : Int64? = nil,
         @absolute_drift : Int64? = nil,

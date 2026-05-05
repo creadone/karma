@@ -101,6 +101,14 @@ module Karma
       end
     end
 
+    private def self.after_lsn_from(object : Hash(String, JSON::Any)) : UInt64
+      value = object["after_lsn"]?.try(&.as_i64) ||
+        raise Karma::Error.new("validation_error", "Field after_lsn is required")
+      raise Karma::Error.new("validation_error", "Field after_lsn must be greater than or equal to 0") if value < 0
+
+      value.to_u64
+    end
+
     private def self.date_or_bucket(object : Hash(String, JSON::Any)) : UInt64?
       object["date"]?.try(&.as_i64.to_u64) || object["bucket"]?.try do |bucket|
         if value = bucket.as_i64?

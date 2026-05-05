@@ -241,6 +241,76 @@ describe "operations commands" do
     end
   end
 
+  it "returns replication entries after LSN" do
+    dump_dir = File.expand_path(".spec_replication_entries_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 43_u64}.to_json, cluster)
+
+    parsed = parse_response(Karma::Commands.call({
+      v:         2,
+      op:        "replication.entries",
+      after_lsn: 1_u64,
+      limit:     2,
+    }.to_json, cluster))
+    response = parsed["response"]
+
+    parsed["protocol_version"].as_i.should eq(2)
+    parsed["success"].as_bool.should be_true
+    response["after_lsn"].as_i.should eq(1)
+    response["limit"].as_i.should eq(2)
+    response["count"].as_i.should eq(2)
+    response["next_lsn"].as_i.should eq(3)
+    response["entries"].as_a.map { |entry| entry["lsn"].as_i }.should eq([2, 3])
+    response["entries"].as_a.first["entry"]["key"].as_i.should eq(42)
+  end
+
+  it "allows read-only token to read replication entries" do
+    dump_dir = File.expand_path(".spec_replication_entries_auth_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.auth_token = "write-secret"
+      c.read_auth_token = "read-secret"
+    end
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64, token: "write-secret"}.to_json, cluster)
+
+    parsed = parse_response(Karma::Commands.call({
+      v:         2,
+      op:        "replication.entries",
+      after_lsn: 0_u64,
+      token:     "read-secret",
+    }.to_json, cluster))
+
+    parsed["success"].as_bool.should be_true
+    parsed["response"]["count"].as_i.should eq(1)
+  ensure
+    Karma.configure do |c|
+      c.auth_token = nil
+      c.read_auth_token = nil
+    end
+  end
+
+  it "validates replication entries request" do
+    cluster = Karma::Cluster.new
+
+    missing = parse_response(Karma::Commands.call({v: 2, op: "replication.entries"}.to_json, cluster))
+    missing["success"].as_bool.should be_false
+    missing["error_code"].as_s.should eq("validation_error")
+
+    bad_limit = parse_response(Karma::Commands.call({v: 2, op: "replication.entries", after_lsn: 0_u64, limit: 0}.to_json, cluster))
+    bad_limit["success"].as_bool.should be_false
+    bad_limit["error_code"].as_s.should eq("validation_error")
+
+    bad_lsn = parse_response(Karma::Commands.call({v: 2, op: "replication.entries", after_lsn: -1, limit: 1}.to_json, cluster))
+    bad_lsn["success"].as_bool.should be_false
+    bad_lsn["error_code"].as_s.should eq("validation_error")
+  end
+
   it "verifies restorable dumps" do
     dump_dir = File.expand_path(".spec_verify_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }

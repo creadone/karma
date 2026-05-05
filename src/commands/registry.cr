@@ -26,6 +26,7 @@ module Karma
       "recovery_checkpoint"   => Commands::RecoveryCheckpoint,
       "recovery_status"       => Commands::RecoveryStatus,
       "replication_status"    => Commands::ReplicationStatus,
+      "replication_entries"   => Commands::ReplicationEntries,
       "ping"                  => Commands::Ping,
       "tree_info"             => Commands::TreeInfo,
       "tree_keys"             => Commands::TreeKeys,
@@ -56,6 +57,7 @@ module Karma
       snapshot_info
       recovery_status
       replication_status
+      replication_entries
     ]
 
     MUTATING_COMMANDS = %w[
