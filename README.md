@@ -648,8 +648,10 @@ Startup with `--restore=true`:
 
 ## Signals
 
-* `SIGINT`: dump all trees and exit.
-* `SIGUSR1`: dump all trees and keep running.
+* `SIGINT`: stop accepting new TCP clients, dump all trees, truncate WAL after
+  successful snapshots, and exit with status 0.
+* `SIGUSR1`: dump all trees, truncate WAL after successful snapshots, and keep
+  running.
 
 ## Performance
 

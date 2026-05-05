@@ -18,6 +18,11 @@ module Karma
     end
 
     def on_shutdown
+      shutdown!
+    end
+
+    def shutdown! : Nil
+      @runtime.try(&.server.stop!)
       dump_all
       Karma::Log.info("server.stop", "version=#{Karma::VERSION}")
     end

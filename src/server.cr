@@ -5,6 +5,7 @@ module Karma
     def initialize(@cluster : Cluster)
       @server = TCPServer.new(Karma.config.host, Karma.config.port)
       @server.tcp_nodelay = Karma.config.tcp_nodelay
+      @stopping = false
     end
 
     def handle(client)
@@ -15,6 +16,14 @@ module Karma
       while client = @server.accept?
         spawn handle(client)
       end
+    rescue ex
+      raise ex unless @stopping
+    end
+
+    def stop! : Nil
+      @stopping = true
+      @server.close
+    rescue
     end
   end
 end

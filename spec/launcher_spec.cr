@@ -6,4 +6,10 @@ describe Karma::Launcher do
 
     launcher.dump_all
   end
+
+  it "allows shutdown before runtime is started" do
+    launcher = Karma::Launcher.new
+
+    launcher.shutdown!
+  end
 end
