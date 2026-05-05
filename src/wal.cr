@@ -2,8 +2,7 @@ require "json"
 
 module Karma
   module Wal
-    FILE_NAME         = "karma.wal"
-    MUTATING_COMMANDS = %w[create drop increment decrement delete reset batch_add delete_before compact ingest_begin ingest_chunk ingest_commit ingest_abort]
+    FILE_NAME = "karma.wal"
 
     def self.enabled? : Bool
       Karma.config.wal
@@ -18,7 +17,7 @@ module Karma
     end
 
     def self.persist?(directive : Commands::Directive) : Bool
-      MUTATING_COMMANDS.includes?(directive.command)
+      Commands.mutating?(directive)
     end
 
     def self.append(directive : Commands::Directive) : Bool

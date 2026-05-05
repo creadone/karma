@@ -1,0 +1,96 @@
+require "json"
+
+module Karma
+  module Commands
+    private def self.tree_or_series(object : Hash(String, JSON::Any)) : String
+      object["tree"]?.try(&.as_s?) ||
+        object["series"]?.try(&.as_s?) ||
+        raise Karma::Error.new("validation_error", "Field tree or series is required")
+    end
+
+    private def self.key_from(object : Hash(String, JSON::Any)) : UInt64
+      object["key"]?.try(&.as_i64.to_u64) ||
+        raise Karma::Error.new("validation_error", "Field key is required")
+    end
+
+    private def self.keys_from(object : Hash(String, JSON::Any)) : Array(UInt64)
+      object["keys"]?.try do |keys|
+        keys.as_a.map(&.as_i64.to_u64)
+      end || raise Karma::Error.new("validation_error", "Field keys is required")
+    end
+
+    private def self.items_from(object : Hash(String, JSON::Any)) : Array(Array(UInt64))
+      object["items"]?.try do |items|
+        items.as_a.map do |item|
+          tuple = item.as_a
+          raise Karma::Error.new("validation_error", "Each item must be [key, bucket, value]") unless tuple.size == 3
+
+          tuple.map(&.as_i64.to_u64)
+        end
+      end || raise Karma::Error.new("validation_error", "Field items is required")
+    end
+
+    private def self.stream_id_from(object : Hash(String, JSON::Any)) : String
+      object["stream_id"]?.try(&.as_s?) ||
+        raise Karma::Error.new("validation_error", "Field stream_id is required")
+    end
+
+    private def self.mode_from(object : Hash(String, JSON::Any)) : String
+      object["mode"]?.try(&.as_s?) ||
+        raise Karma::Error.new("validation_error", "Field mode is required")
+    end
+
+    private def self.chunk_seq_from(object : Hash(String, JSON::Any)) : UInt64
+      object["chunk_seq"]?.try(&.as_i64.to_u64) ||
+        raise Karma::Error.new("validation_error", "Field chunk_seq is required")
+    end
+
+    private def self.granularity_from(object : Hash(String, JSON::Any)) : String?
+      object["granularity"]?.try(&.as_s?)
+    end
+
+    private def self.limit_from(object : Hash(String, JSON::Any)) : Int32?
+      object["limit"]?.try(&.as_i.to_i32)
+    end
+
+    private def self.cursor_from(object : Hash(String, JSON::Any)) : UInt64?
+      object["cursor"]?.try do |cursor|
+        cursor.raw.nil? ? nil : cursor.as_i64.to_u64
+      end
+    end
+
+    private def self.date_or_bucket(object : Hash(String, JSON::Any)) : UInt64?
+      object["date"]?.try(&.as_i64.to_u64) || object["bucket"]?.try do |bucket|
+        if value = bucket.as_i64?
+          value.to_u64
+        else
+          bucket.as_s.delete("-").to_u64
+        end
+      end
+    end
+
+    private def self.value_from(object : Hash(String, JSON::Any)) : UInt64?
+      object["value"]?.try(&.as_i64.to_u64)
+    end
+
+    private def self.before_from(object : Hash(String, JSON::Any)) : UInt64
+      object["before"]?.try(&.as_i64.to_u64) ||
+        object["date"]?.try(&.as_i64.to_u64) ||
+        raise Karma::Error.new("validation_error", "Field before is required")
+    end
+
+    private def self.optional_range_from(object : Hash(String, JSON::Any)) : Karma::TimeSeries::BucketRange?
+      object.has_key?("range") ? range_from(object) : nil
+    end
+
+    private def self.range_from(object : Hash(String, JSON::Any)) : Karma::TimeSeries::BucketRange
+      range = object["range"]?.try(&.as_h) || raise Karma::Error.new("validation_error", "Field range is required")
+      from = range["from"]?.try(&.as_i64.to_u64) || raise Karma::Error.new("validation_error", "Field range.from is required")
+      to = range["to"]?.try(&.as_i64.to_u64) || raise Karma::Error.new("validation_error", "Field range.to is required")
+      Karma::TimeSeries::BucketRange.new(
+        Karma::TimeSeries::Bucket.new(from),
+        Karma::TimeSeries::Bucket.new(to)
+      )
+    end
+  end
+end
