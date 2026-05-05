@@ -361,6 +361,81 @@ describe "operations commands" do
     parsed["response"]["status"].as_s.should eq("ok")
     parsed["response"]["trees"].as_i.should eq(1)
     parsed["response"]["keys"].as_i.should eq(1)
+    parsed["response"]["snapshot_metadata_checked"].as_i.should eq(1)
+    parsed["response"]["restore_snapshot_lsn"].as_i.should be > 0
+    parsed["response"]["wal_entries_checked"].as_i.should eq(0)
+    parsed["response"]["wal_lsn_file"].as_i.should be > 0
+  end
+
+  it "rejects invalid snapshot metadata during verify" do
+    dump_dir = File.expand_path(".spec_verify_metadata_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({command: "increment", tree_name: "articles", key: 42_u64}.to_json, cluster)
+    cluster.dump_all
+    dump_path = Karma::Backup.dumps(dump_dir).first
+    metadata_path = Karma::Backup.metadata_path(dump_path)
+    metadata = JSON.parse(File.read(metadata_path)).as_h
+    metadata["bytes"] = JSON::Any.new(0_i64)
+    File.write(metadata_path, metadata.to_json)
+
+    parsed = parse_response(Karma::Commands.call({command: "verify"}.to_json, cluster))
+
+    parsed["success"].as_bool.should be_false
+    parsed["error_code"].as_s.should eq("validation_error")
+    parsed["response"].as_s.should contain("Snapshot metadata bytes mismatch")
+  end
+
+  it "rejects WAL gaps during verify" do
+    dump_dir = File.expand_path(".spec_verify_wal_gap_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 43_u64}.to_json, cluster)
+    lines = File.read_lines(Karma::Wal.path(dump_dir))
+    File.write(Karma::Wal.path(dump_dir), "#{lines[0]}\n#{lines[2]}\n")
+
+    parsed = parse_response(Karma::Commands.call({command: "verify"}.to_json, cluster))
+
+    parsed["success"].as_bool.should be_false
+    parsed["error_code"].as_s.should eq("validation_error")
+    parsed["response"].as_s.should contain("WAL LSN gap")
+  end
+
+  it "rejects WAL entries already covered by snapshot metadata during verify" do
+    dump_dir = File.expand_path(".spec_verify_wal_covered_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({command: "dump", tree_name: "articles"}.to_json, cluster)
+
+    parsed = parse_response(Karma::Commands.call({command: "verify"}.to_json, cluster))
+
+    parsed["success"].as_bool.should be_false
+    parsed["error_code"].as_s.should eq("validation_error")
+    parsed["response"].as_s.should contain("already covered by snapshot")
+  end
+
+  it "rejects inconsistent latest snapshot LSNs during verify" do
+    dump_dir = File.expand_path(".spec_verify_snapshot_lsn_mismatch_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "links", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({command: "dump", tree_name: "articles"}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "links", key: 43_u64}.to_json, cluster)
+    Karma::Commands.call({command: "dump", tree_name: "links"}.to_json, cluster)
+
+    parsed = parse_response(Karma::Commands.call({command: "verify"}.to_json, cluster))
+
+    parsed["success"].as_bool.should be_false
+    parsed["error_code"].as_s.should eq("validation_error")
+    parsed["response"].as_s.should contain("inconsistent last_lsn")
   end
 
   it "returns snapshot info" do

@@ -818,6 +818,10 @@ Startup with `--restore=true`:
 3. Truncates WAL after successful snapshotting.
 4. Prunes old snapshots per tree.
 
+`snapshot.verify` restores data into a temporary cluster and also checks
+snapshot sidecar metadata, WAL LSN continuity, WAL/snapshot boundaries, and the
+persisted `karma.wal.lsn` file.
+
 ## Signals
 
 * `SIGINT`: stop accepting new TCP clients, dump all trees, truncate WAL after
