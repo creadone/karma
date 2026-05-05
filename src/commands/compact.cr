@@ -7,6 +7,7 @@ module Karma
         else
           cluster.compact
         end
+        Karma::Operations.record_compact
         "OK"
       end
     end

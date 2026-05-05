@@ -26,6 +26,11 @@ describe "operations commands" do
     parsed["response"]["command_count"].as_i.should be > 0
     parsed["response"]["latency_ms_last"].as_f.should be >= 0.0
     parsed["response"]["legacy_request_count"].as_i.should be > 0
+    parsed["response"]["query_timeout_count"].as_i.should be >= 0
+    parsed["response"]["batch_read_count"].as_i.should be >= 0
+    parsed["response"]["batch_write_count"].as_i.should be >= 0
+    parsed["response"]["retention_count"].as_i.should be >= 0
+    parsed["response"]["compact_count"].as_i.should be >= 0
     parsed["response"]["ingest_active_streams"].as_i.should eq(0)
   end
 
@@ -41,9 +46,57 @@ describe "operations commands" do
     metrics.should contain("karma_commands_total")
     metrics.should contain("karma_errors_total")
     metrics.should contain("karma_protocol_v1_requests_total")
+    metrics.should contain("karma_query_timeouts_total")
+    metrics.should contain("karma_batch_reads_total")
+    metrics.should contain("karma_batch_read_keys_total")
+    metrics.should contain("karma_batch_writes_total")
+    metrics.should contain("karma_batch_write_items_total")
+    metrics.should contain("karma_retention_operations_total")
+    metrics.should contain("karma_compactions_total")
     metrics.should contain("karma_command_latency_ms")
     metrics.should contain("karma_ingest_active_streams")
     metrics.should contain("karma_ingest_chunks_applied_total")
+  end
+
+  it "returns batch, retention, compaction, and timeout metrics" do
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({
+      v:      2,
+      op:     "series.batch_add",
+      series: "links",
+      items:  [[42_u64, 20260501_u64, 2_u64], [43_u64, 20260502_u64, 3_u64]],
+    }.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.batch_sum", series: "links", keys: [42_u64, 43_u64]}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "series.delete_before", series: "links", before: 20260502_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "series.compact", series: "links"}.to_json, cluster)
+
+    Karma.configure { |c| c.query_timeout_ms = 1 }
+    cluster.pick("large") do |tree|
+      50_000.times do |index|
+        tree.increment((index + 1).to_u64, 20260505_u64, 1_u64)
+      end
+    end
+    Karma::Commands.call({v: 2, op: "tree.summary", tree: "large"}.to_json, cluster)
+    Karma.configure { |c| c.query_timeout_ms = 1_000 }
+
+    stats = expect_success(Karma::Commands.call({command: "stats"}.to_json, cluster))["response"]
+    stats["batch_read_count"].as_i.should be >= 1
+    stats["batch_read_key_count"].as_i.should be >= 2
+    stats["batch_write_count"].as_i.should be >= 1
+    stats["batch_write_item_count"].as_i.should be >= 2
+    stats["retention_count"].as_i.should be >= 1
+    stats["compact_count"].as_i.should be >= 1
+    stats["query_timeout_count"].as_i.should be >= 1
+
+    metrics = expect_success(Karma::Commands.call({command: "metrics"}.to_json, cluster))["response"].as_s
+    metrics.should contain("karma_batch_reads_total")
+    metrics.should contain("karma_batch_writes_total")
+    metrics.should contain("karma_retention_operations_total")
+    metrics.should contain("karma_compactions_total")
+    metrics.should contain("karma_query_timeouts_total")
+  ensure
+    Karma.configure { |c| c.query_timeout_ms = 1_000 }
   end
 
   it "returns ingest stats and metrics" do

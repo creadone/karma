@@ -20,6 +20,7 @@ module Karma
           tree.increment(item[0], item[1], value)
         end
 
+        Karma::Operations.record_batch_write(items.size)
         {applied: items.size, total: total}
       end
 

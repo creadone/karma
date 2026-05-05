@@ -14,10 +14,7 @@ module Karma
             range.to.value
           )
         else
-          return tree.find(
-            range.from.value,
-            range.to.value
-          )
+          return cluster.tree_series(series.name, range)
         end
       end
     end

@@ -13,6 +13,7 @@ module Karma
     property max_response_bytes : Int32 = 1_048_576
     property read_timeout_seconds : Int32 = 5
     property write_timeout_seconds : Int32 = 5
+    property query_timeout_ms : Int32 = 1_000
     property dump_retention_per_tree : Int32 = 5
     property auth_token : String?
     property read_auth_token : String?

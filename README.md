@@ -120,6 +120,10 @@ Options:
 --write-timeout=seconds
   Client socket write timeout. Default: 5
 
+--query-timeout-ms=ms
+  Tree-level read timeout in milliseconds. Use 0 to disable the limit.
+  Default: 1000
+
 --auth-token=token
   Require every client command to include the same token field.
 
@@ -184,6 +188,7 @@ Stable error codes:
 * `forbidden`
 * `request_too_large`
 * `response_too_large`
+* `query_timeout`
 * `internal_error`
 
 If `--auth-token` is configured, include `token` in every client request:
@@ -489,6 +494,13 @@ Metrics include:
 * `karma_commands_total`
 * `karma_errors_total`
 * `karma_protocol_v1_requests_total`
+* `karma_query_timeouts_total`
+* `karma_batch_reads_total`
+* `karma_batch_read_keys_total`
+* `karma_batch_writes_total`
+* `karma_batch_write_items_total`
+* `karma_retention_operations_total`
+* `karma_compactions_total`
 * `karma_command_latency_ms`
 * `karma_command_latency_ms_average`
 * `karma_ingest_active_streams`

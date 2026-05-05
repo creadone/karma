@@ -664,6 +664,28 @@ describe Karma::Commands do
     items.map { |item| item["value"].as_i }.should eq([7, 2])
   end
 
+  it "times out expensive tree-level reads" do
+    Karma.configure { |c| c.query_timeout_ms = 1 }
+    cluster = Karma::Cluster.new
+    cluster.pick("links") do |tree|
+      50_000.times do |index|
+        tree.increment((index + 1).to_u64, 20260505_u64, 1_u64)
+      end
+    end
+
+    response = Karma::Commands.call({
+      v:    2,
+      op:   "tree.summary",
+      tree: "links",
+    }.to_json, cluster)
+    parsed = parse_response(response)
+
+    parsed["success"].as_bool.should be_false
+    parsed["error_code"].as_s.should eq("query_timeout")
+  ensure
+    Karma.configure { |c| c.query_timeout_ms = 1_000 }
+  end
+
   it "enforces v2 tree read limits" do
     cluster = Karma::Cluster.new
     Karma::Commands.call({v: 2, op: "tree.create", tree: "links"}.to_json, cluster)

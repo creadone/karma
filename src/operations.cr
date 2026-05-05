@@ -5,12 +5,51 @@ module Karma
     @@command_count = 0_i64
     @@error_count = 0_i64
     @@legacy_request_count = 0_i64
+    @@query_timeout_count = 0_i64
+    @@batch_read_count = 0_i64
+    @@batch_read_key_count = 0_i64
+    @@batch_write_count = 0_i64
+    @@batch_write_item_count = 0_i64
+    @@retention_count = 0_i64
+    @@compact_count = 0_i64
     @@total_latency_ms = 0.0
     @@last_latency_ms = 0.0
 
     def self.record_legacy_request : Nil
       METRICS_MUTEX.synchronize do
         @@legacy_request_count += 1
+      end
+    end
+
+    def self.record_query_timeout : Nil
+      METRICS_MUTEX.synchronize do
+        @@query_timeout_count += 1
+      end
+    end
+
+    def self.record_batch_read(key_count : Int32) : Nil
+      METRICS_MUTEX.synchronize do
+        @@batch_read_count += 1
+        @@batch_read_key_count += key_count
+      end
+    end
+
+    def self.record_batch_write(item_count : Int32) : Nil
+      METRICS_MUTEX.synchronize do
+        @@batch_write_count += 1
+        @@batch_write_item_count += item_count
+      end
+    end
+
+    def self.record_retention : Nil
+      METRICS_MUTEX.synchronize do
+        @@retention_count += 1
+      end
+    end
+
+    def self.record_compact : Nil
+      METRICS_MUTEX.synchronize do
+        @@compact_count += 1
       end
     end
 
@@ -44,6 +83,13 @@ module Karma
         command_count:          command_count,
         error_count:            error_count,
         legacy_request_count:   legacy_request_count,
+        query_timeout_count:    query_timeout_count,
+        batch_read_count:       batch_read_count,
+        batch_read_key_count:   batch_read_key_count,
+        batch_write_count:      batch_write_count,
+        batch_write_item_count: batch_write_item_count,
+        retention_count:        retention_count,
+        compact_count:          compact_count,
         latency_ms_avg:         average_latency_ms,
         latency_ms_last:        last_latency_ms,
         ingest_active_streams:  ingest_metrics[:active_streams],
@@ -76,6 +122,20 @@ module Karma
         io << "karma_errors_total #{error_count}\n"
         io << "# TYPE karma_protocol_v1_requests_total counter\n"
         io << "karma_protocol_v1_requests_total #{legacy_request_count}\n"
+        io << "# TYPE karma_query_timeouts_total counter\n"
+        io << "karma_query_timeouts_total #{query_timeout_count}\n"
+        io << "# TYPE karma_batch_reads_total counter\n"
+        io << "karma_batch_reads_total #{batch_read_count}\n"
+        io << "# TYPE karma_batch_read_keys_total counter\n"
+        io << "karma_batch_read_keys_total #{batch_read_key_count}\n"
+        io << "# TYPE karma_batch_writes_total counter\n"
+        io << "karma_batch_writes_total #{batch_write_count}\n"
+        io << "# TYPE karma_batch_write_items_total counter\n"
+        io << "karma_batch_write_items_total #{batch_write_item_count}\n"
+        io << "# TYPE karma_retention_operations_total counter\n"
+        io << "karma_retention_operations_total #{retention_count}\n"
+        io << "# TYPE karma_compactions_total counter\n"
+        io << "karma_compactions_total #{compact_count}\n"
         io << "# TYPE karma_command_latency_ms gauge\n"
         io << "karma_command_latency_ms #{last_latency_ms}\n"
         io << "# TYPE karma_command_latency_ms_average gauge\n"
@@ -121,6 +181,34 @@ module Karma
 
     private def self.legacy_request_count : Int64
       METRICS_MUTEX.synchronize { @@legacy_request_count }
+    end
+
+    private def self.query_timeout_count : Int64
+      METRICS_MUTEX.synchronize { @@query_timeout_count }
+    end
+
+    private def self.batch_read_count : Int64
+      METRICS_MUTEX.synchronize { @@batch_read_count }
+    end
+
+    private def self.batch_read_key_count : Int64
+      METRICS_MUTEX.synchronize { @@batch_read_key_count }
+    end
+
+    private def self.batch_write_count : Int64
+      METRICS_MUTEX.synchronize { @@batch_write_count }
+    end
+
+    private def self.batch_write_item_count : Int64
+      METRICS_MUTEX.synchronize { @@batch_write_item_count }
+    end
+
+    private def self.retention_count : Int64
+      METRICS_MUTEX.synchronize { @@retention_count }
+    end
+
+    private def self.compact_count : Int64
+      METRICS_MUTEX.synchronize { @@compact_count }
     end
 
     private def self.last_latency_ms : Float64

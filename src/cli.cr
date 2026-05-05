@@ -49,6 +49,10 @@ module Karma
         Karma.config.write_timeout_seconds = seconds.to_i32
       end
 
+      parser.on("--query-timeout-ms=ms", "Tree-level read timeout in milliseconds; 0 disables the limit (default: #{Karma.config.query_timeout_ms})") do |ms|
+        Karma.config.query_timeout_ms = ms.to_i32
+      end
+
       parser.on("--auth-token=token", "Require token field in client commands") do |token|
         Karma.config.auth_token = token
       end
