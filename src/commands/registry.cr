@@ -25,6 +25,7 @@ module Karma
       "reconciliation_report" => Commands::ReconciliationReport,
       "recovery_checkpoint"   => Commands::RecoveryCheckpoint,
       "recovery_status"       => Commands::RecoveryStatus,
+      "replication_status"    => Commands::ReplicationStatus,
       "ping"                  => Commands::Ping,
       "tree_info"             => Commands::TreeInfo,
       "tree_keys"             => Commands::TreeKeys,
@@ -54,6 +55,7 @@ module Karma
       tree_top
       snapshot_info
       recovery_status
+      replication_status
     ]
 
     MUTATING_COMMANDS = %w[

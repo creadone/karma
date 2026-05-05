@@ -196,6 +196,51 @@ describe "operations commands" do
     parsed["error_code"].as_s.should eq("validation_error")
   end
 
+  it "returns replication status" do
+    dump_dir = File.expand_path(".spec_replication_status_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    cluster.dump_all
+    Karma::Recovery.checkpoint("clickhouse-links", "export-2026-05-05", "batch-42", dump_dir)
+
+    parsed = parse_response(Karma::Commands.call({v: 2, op: "replication.status"}.to_json, cluster))
+    status = parsed["response"]
+
+    parsed["protocol_version"].as_i.should eq(2)
+    parsed["success"].as_bool.should be_true
+    status["role"].as_s.should eq("master")
+    status["wal_enabled"].as_bool.should be_true
+    status["wal_current_lsn"].as_i.should be > 0
+    status["last_snapshot_lsn"].as_i.should be > 0
+    status["latest_snapshots"].as_a.first["tree"].as_s.should eq("articles")
+    status["recovery"]["checkpoint_count"].as_i.should eq(1)
+    status["recovery"]["checkpoints"].as_a.first["source"].as_s.should eq("clickhouse-links")
+  end
+
+  it "allows read-only token to inspect replication status" do
+    Karma.configure do |c|
+      c.auth_token = "write-secret"
+      c.read_auth_token = "read-secret"
+    end
+    cluster = Karma::Cluster.new
+
+    parsed = parse_response(Karma::Commands.call({
+      v:     2,
+      op:    "replication.status",
+      token: "read-secret",
+    }.to_json, cluster))
+
+    parsed["success"].as_bool.should be_true
+    parsed["response"]["role"].as_s.should eq("master")
+  ensure
+    Karma.configure do |c|
+      c.auth_token = nil
+      c.read_auth_token = nil
+    end
+  end
+
   it "verifies restorable dumps" do
     dump_dir = File.expand_path(".spec_verify_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }

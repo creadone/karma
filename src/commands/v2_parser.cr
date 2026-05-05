@@ -21,6 +21,8 @@ module Karma
         Directive.new("recovery_checkpoint", source: source_from(object), source_offset: source_offset_from(object), event_id: event_id_from(object), token: token, protocol_version: 2_u32)
       when "recovery.status"
         Directive.new("recovery_status", source: optional_source_from(object), token: token, protocol_version: 2_u32)
+      when "replication.status"
+        Directive.new("replication_status", token: token, protocol_version: 2_u32)
       when "snapshot.info"
         Directive.new("snapshot_info", token: token, protocol_version: 2_u32)
       when "tree.create"

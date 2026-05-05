@@ -587,6 +587,12 @@ Record and inspect recovery checkpoints for external ingestion sources:
 {"v":2,"op":"recovery.status","source":"clickhouse-links"}
 ```
 
+Inspect replication bootstrap state:
+
+```json
+{"v":2,"op":"replication.status"}
+```
+
 ### Legacy v1
 
 Legacy clients can continue to use v1 `command` requests:

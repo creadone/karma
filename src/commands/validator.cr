@@ -3,6 +3,7 @@ module Karma
     private def self.validate(directive : Directive) : Nil
       case directive.command
       when "ping", "trees", "dumps", "dump_all", "health", "stats", "metrics", "verify"
+      when "replication_status"
       when "snapshot_info"
       when "create", "drop", "dump", "load", "reset"
         require_tree_name(directive)
