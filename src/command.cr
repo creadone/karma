@@ -14,7 +14,7 @@ require "./commands/validator"
 
 module Karma
   module Commands
-    def self.call(message, cluster, persist = true, authorize = true, synchronize = true, track_legacy = true, enforce_request_size = true)
+    def self.call(message, cluster, persist = true, authorize = true, synchronize = true, track_legacy = true, enforce_request_size = true, enforce_role = true)
       started_at = Time.monotonic
       protocol_version = request_protocol_version(message)
       if enforce_request_size && request_too_large?(message)
@@ -33,6 +33,7 @@ module Karma
         if known?(directive)
           authenticate(directive) if authorize
           validate(directive)
+          enforce_role!(directive) if enforce_role
           response = apply(directive, cluster, persist, synchronize)
           answer = Karma::Protocol.success(response, protocol_version)
           if response_too_large?(answer)
@@ -88,6 +89,13 @@ module Karma
         Karma::Wal.append(directive) if persist && Karma::Wal.persist?(directive)
         COMMANDS[directive.command].call(directive, cluster)
       end
+    end
+
+    private def self.enforce_role!(directive : Directive) : Nil
+      return unless Karma.config.role == "slave"
+      return if read_only?(directive)
+
+      raise Karma::Error.new("forbidden", "Slave role cannot execute command #{directive.command}")
     end
 
     private def self.authenticate(directive : Directive) : Nil

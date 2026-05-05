@@ -20,6 +20,10 @@ module Karma
           Karma.config.dump_dir = path.to_s
         end
 
+        parser.on("--role=role", "Replication role: master or slave (default: #{Karma.config.role})") do |role|
+          Karma.config.role = role
+        end
+
         parser.on("-r flag", "--restore=flag", "Load last state from dumps (default: #{Karma.config.restore})") do |flag|
           Karma.config.restore = bool_flag(flag, "--restore")
         end

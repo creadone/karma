@@ -10,6 +10,8 @@ module Karma
         io << "karma_keys #{cluster.key_count}\n"
         io << "# TYPE karma_dumps gauge\n"
         io << "karma_dumps #{Karma::Backup.dumps(Karma.config.dump_dir).size}\n"
+        io << "# TYPE karma_role gauge\n"
+        io << "karma_role{role=\"#{Karma.config.role}\"} 1\n"
         io << "# TYPE karma_wal_bytes gauge\n"
         io << "karma_wal_bytes #{wal_bytes}\n"
         io << "# TYPE karma_wal_current_lsn gauge\n"

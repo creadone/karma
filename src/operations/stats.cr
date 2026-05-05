@@ -4,6 +4,7 @@ module Karma
       {
         status:         "ok",
         uptime_seconds: uptime_seconds,
+        role:           Karma.config.role,
         wal_enabled:    Karma::Wal.enabled?,
       }
     end
@@ -15,6 +16,7 @@ module Karma
         trees:                              cluster.tree_count,
         keys:                               cluster.key_count,
         dump_count:                         Karma::Backup.dumps(Karma.config.dump_dir).size,
+        role:                               Karma.config.role,
         wal_enabled:                        Karma::Wal.enabled?,
         wal_bytes:                          wal_bytes,
         wal_current_lsn:                    Karma::Wal.current_lsn,

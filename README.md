@@ -24,6 +24,10 @@ with atomic `.tree` snapshots, and protected between snapshots by an append-only
 write-ahead log (`karma.wal`). The current concurrency model serializes command
 execution through one process-local state lock.
 
+Replication is being introduced incrementally. `--role=slave` already makes the
+node reject direct mutating client commands while still allowing internal WAL
+replay.
+
 For critical production use, run it with a persistent volume, WAL enabled,
 `--wal-fsync=true`, health checks, and regular `dump_all` or `SIGUSR1`
 snapshots.
@@ -109,6 +113,9 @@ Options:
 -d path, --directory=path
   Directory for snapshots and WAL. Default: .
 
+--role=role
+  Replication role: master or slave. Default: master
+
 -r flag, --restore=flag
   Load snapshots and replay WAL on startup. Default: true
 
@@ -170,6 +177,9 @@ KARMA_PORT
 
 KARMA_DUMP_DIR
   Same as --directory.
+
+KARMA_ROLE
+  Same as --role.
 
 KARMA_RESTORE
   Same as --restore.
@@ -596,6 +606,7 @@ Metrics include:
 * `karma_trees`
 * `karma_keys`
 * `karma_dumps`
+* `karma_role`
 * `karma_wal_bytes`
 * `karma_wal_current_lsn`
 * `karma_memory_bytes`

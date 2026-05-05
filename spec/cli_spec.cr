@@ -4,6 +4,7 @@ CLI_ENV_KEYS = %w[
   KARMA_HOST
   KARMA_PORT
   KARMA_DUMP_DIR
+  KARMA_ROLE
   KARMA_RESTORE
   KARMA_TCP_NODELAY
   KARMA_WAL
@@ -30,6 +31,7 @@ describe Karma::Cli do
     Karma.configure do |c|
       c.host = "0.0.0.0"
       c.port = 8080
+      c.role = "master"
       c.restore = true
       c.tcp_nodelay = true
       c.wal = true
@@ -48,6 +50,7 @@ describe Karma::Cli do
       "--bind=127.0.0.1",
       "--port=9090",
       "--directory=/tmp/karma-test",
+      "--role=slave",
       "--restore=false",
       "--nodelay=false",
       "--wal=false",
@@ -67,6 +70,7 @@ describe Karma::Cli do
     Karma.config.host.should eq("127.0.0.1")
     Karma.config.port.should eq(9090)
     Karma.config.dump_dir.should eq("/tmp/karma-test")
+    Karma.config.role.should eq("slave")
     Karma.config.restore.should be_false
     Karma.config.tcp_nodelay.should be_false
     Karma.config.wal.should be_false
@@ -86,6 +90,7 @@ describe Karma::Cli do
       c.host = "0.0.0.0"
       c.port = 8080
       c.dump_dir = "."
+      c.role = "master"
       c.restore = true
       c.tcp_nodelay = true
       c.wal = true
@@ -109,6 +114,7 @@ describe Karma::Cli do
       c.host = "0.0.0.0"
       c.port = 8080
       c.dump_dir = "."
+      c.role = "master"
       c.restore = true
       c.tcp_nodelay = true
       c.wal = true
@@ -128,6 +134,7 @@ describe Karma::Cli do
     ENV["KARMA_HOST"] = "127.0.0.1"
     ENV["KARMA_PORT"] = "7000"
     ENV["KARMA_DUMP_DIR"] = "/var/lib/karma"
+    ENV["KARMA_ROLE"] = "slave"
     ENV["KARMA_RESTORE"] = "false"
     ENV["KARMA_TCP_NODELAY"] = "false"
     ENV["KARMA_WAL"] = "false"
@@ -148,6 +155,7 @@ describe Karma::Cli do
     Karma.config.host.should eq("127.0.0.1")
     Karma.config.port.should eq(7001)
     Karma.config.dump_dir.should eq("/var/lib/karma")
+    Karma.config.role.should eq("slave")
     Karma.config.restore.should be_false
     Karma.config.tcp_nodelay.should be_false
     Karma.config.wal.should be_true
@@ -168,6 +176,7 @@ describe Karma::Cli do
       c.host = "0.0.0.0"
       c.port = 8080
       c.dump_dir = "."
+      c.role = "master"
       c.restore = true
       c.tcp_nodelay = true
       c.wal = true
@@ -212,6 +221,7 @@ describe Karma::Cli do
       c.host = "0.0.0.0"
       c.port = 8080
       c.dump_dir = "."
+      c.role = "master"
       c.restore = true
       c.tcp_nodelay = true
       c.wal = true
@@ -227,5 +237,15 @@ describe Karma::Cli do
       c.read_auth_token = nil
       c.log = false
     end
+  end
+
+  it "validates replication role" do
+    clear_cli_env
+
+    expect_raises(Karma::Error, "Invalid configuration: role must be master or slave") do
+      Karma::Cli.parse!(["--role=replica"])
+    end
+  ensure
+    Karma.configure { |c| c.role = "master" }
   end
 end

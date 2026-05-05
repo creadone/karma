@@ -55,6 +55,21 @@ describe Karma::Wal do
     restored.get("articles").sum(42_u64).should eq(1_u64)
   end
 
+  it "replays WAL on slave role" do
+    dump_dir = File.expand_path(".spec_wal_slave_replay_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    Karma.configure { |c| c.role = "slave" }
+
+    restored = Karma::Cluster.restore_with_wal(dump_dir)
+
+    restored.get("articles").sum(42_u64).should eq(1_u64)
+  ensure
+    Karma.configure { |c| c.role = "master" }
+  end
+
   it "truncates WAL after dumping all trees" do
     dump_dir = File.expand_path(".spec_wal_compact_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }

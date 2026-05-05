@@ -195,6 +195,33 @@ describe Karma::Commands do
     Karma.configure { |c| c.read_auth_token = nil }
   end
 
+  it "rejects mutating client commands on slave role" do
+    Karma.configure { |c| c.role = "slave" }
+    cluster = Karma::Cluster.new
+
+    write_response = parse_response(Karma::Commands.call({
+      v:      2,
+      op:     "counter.increment",
+      series: "links",
+      key:    42_u64,
+    }.to_json, cluster))
+
+    write_response["protocol_version"].as_i.should eq(2)
+    write_response["success"].as_bool.should be_false
+    write_response["error_code"].as_s.should eq("forbidden")
+    cluster.trees.has_key?("links").should be_false
+
+    admin_response = parse_response(Karma::Commands.call({v: 2, op: "snapshot.create_all"}.to_json, cluster))
+    admin_response["success"].as_bool.should be_false
+    admin_response["error_code"].as_s.should eq("forbidden")
+
+    read_response = parse_response(Karma::Commands.call({v: 2, op: "system.stats"}.to_json, cluster))
+    read_response["success"].as_bool.should be_true
+    read_response["response"]["role"].as_s.should eq("slave")
+  ensure
+    Karma.configure { |c| c.role = "master" }
+  end
+
   it "supports v2 system operations" do
     cluster = Karma::Cluster.new
 

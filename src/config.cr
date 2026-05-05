@@ -5,6 +5,7 @@ module Karma
     property host : String = "0.0.0.0"
     property port : Int32 = 8080
     property dump_dir : String = "."
+    property role : String = "master"
     property restore : Bool = true
     property tcp_nodelay : Bool = true
     property wal : Bool = true
@@ -24,6 +25,7 @@ module Karma
       @host = string_env("KARMA_HOST", @host)
       @port = int_env("KARMA_PORT", @port)
       @dump_dir = string_env("KARMA_DUMP_DIR", @dump_dir)
+      @role = string_env("KARMA_ROLE", @role)
       @restore = bool_env("KARMA_RESTORE", @restore)
       @tcp_nodelay = bool_env("KARMA_TCP_NODELAY", @tcp_nodelay)
       @wal = bool_env("KARMA_WAL", @wal)
@@ -44,6 +46,7 @@ module Karma
       raise_validation("host must not be empty") if @host.empty?
       raise_validation("port must be between 1 and 65535") unless (1..65_535).includes?(@port)
       raise_validation("dump_dir must not be empty") if @dump_dir.empty?
+      raise_validation("role must be master or slave") unless %w[master slave].includes?(@role)
       raise_validation("max_request_bytes must be greater than 0") unless @max_request_bytes > 0
       raise_validation("max_response_bytes must be greater than or equal to 0") unless @max_response_bytes >= 0
       raise_validation("read_timeout_seconds must be greater than or equal to 0") unless @read_timeout_seconds >= 0

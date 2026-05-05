@@ -7,6 +7,7 @@ describe "operations commands" do
     parsed = expect_success(Karma::Commands.call({command: "health"}.to_json, cluster))
 
     parsed["response"]["status"].as_s.should eq("ok")
+    parsed["response"]["role"].as_s.should eq("master")
     parsed["response"]["wal_enabled"].as_bool.should be_true
   end
 
@@ -21,6 +22,7 @@ describe "operations commands" do
 
     parsed["response"]["trees"].as_i.should eq(1)
     parsed["response"]["keys"].as_i.should eq(1)
+    parsed["response"]["role"].as_s.should eq("master")
     parsed["response"]["wal_bytes"].as_i.should be > 0
     parsed["response"]["wal_current_lsn"].as_i.should be > 0
     parsed["response"]["memory_bytes"].as_i.should be > 0
@@ -43,6 +45,7 @@ describe "operations commands" do
     metrics = parsed["response"].as_s
     metrics.should contain("karma_uptime_seconds")
     metrics.should contain("karma_trees")
+    metrics.should contain("karma_role")
     metrics.should contain("karma_wal_current_lsn")
     metrics.should contain("karma_memory_bytes")
     metrics.should contain("karma_commands_total")
