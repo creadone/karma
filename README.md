@@ -596,6 +596,14 @@ Volume sensitivity test, in-process, WAL off, 7 daily buckets per key:
 | 50,000 | 350,000 | 28.48 MiB | 2.86 MiB | 1,778,740 key reads/sec | 0.4863 ms | 33.41 ms | 20.35 ms | 15.18 ms |
 | 100,000 | 700,000 | 47.70 MiB | 5.79 MiB | 1,558,846 key reads/sec | 0.4809 ms | 88.58 ms | 42.81 ms | 32.21 ms |
 
+High-cardinality yearly profile, in-process, WAL off, 356 daily buckets per key:
+
+| Keys | Data points | Heap | Snapshot | Batch sum | Batch p95 | Summary | Snapshot | Restore |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10,000 | 3,560,000 | 234.11 MiB | 20.58 MiB | 2,299,570 key reads/sec | 4.4254 ms | 140.71 ms | 80.07 ms | 115.79 ms |
+| 25,000 | 8,900,000 | 570.14 MiB | 51.45 MiB | 1,936,145 key reads/sec | 8.9875 ms | 401.43 ms | 201.91 ms | 323.58 ms |
+| 50,000 | 17,800,000 | 1,114.17 MiB | 102.90 MiB | 1,918,123 key reads/sec | 2.3001 ms | 960.62 ms | 426.69 ms | 561.90 ms |
+
 Replication load test on the same date used `clients=4`, `keys=10000`,
 `batch_size=1000`, `write_batches=100`, `read_rounds=100`,
 `replication_poll_interval_ms=10`, and `replication_batch_size=1000`.
@@ -630,6 +638,12 @@ bin/karma_volume_load_test \
   --batch-size=1000 \
   --single-rounds=1000 \
   --read-rounds=100
+```
+
+High-cardinality yearly profile with 356 buckets per key:
+
+```sh
+bin/karma_volume_load_test --profile=year-356
 ```
 
 Master/slave replication test:

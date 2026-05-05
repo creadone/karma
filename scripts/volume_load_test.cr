@@ -25,6 +25,25 @@ wal = false
 wal_fsync = false
 base_dir = File.join(Dir.tempdir, "karma_volume_load_test_#{Process.pid}")
 json_output = false
+profile = "default"
+sizes_overridden = false
+bucket_count_overridden = false
+batch_size_overridden = false
+
+def apply_profile!(profile : String, sizes : Array(Int32), bucket_count : Int32, batch_size : Int32, sizes_overridden : Bool, bucket_count_overridden : Bool, batch_size_overridden : Bool)
+  case profile
+  when "default"
+    {sizes, bucket_count, batch_size}
+  when "year-356"
+    {
+      sizes_overridden ? sizes : [10_000, 25_000, 50_000],
+      bucket_count_overridden ? bucket_count : 356,
+      batch_size_overridden ? batch_size : 5_000,
+    }
+  else
+    raise "Unknown profile #{profile}. Available profiles: default, year-356"
+  end
+end
 
 def bool_flag(value : String) : Bool
   case value
@@ -45,12 +64,41 @@ def parse_sizes(value : String) : Array(Int32)
   end
 end
 
+def parse_bucket_date(bucket : UInt64) : Time
+  text = bucket.to_s
+  raise "first-bucket must use YYYYMMDD format" unless text.size == 8
+
+  year = text[0, 4].to_i
+  month = text[4, 2].to_i
+  day = text[6, 2].to_i
+  Time.utc(year, month, day)
+rescue ArgumentError
+  raise "first-bucket must be a valid UTC date in YYYYMMDD format"
+end
+
+def bucket_sequence(first_bucket : UInt64, bucket_count : Int32) : Array(UInt64)
+  first_date = parse_bucket_date(first_bucket)
+  Array(UInt64).new(bucket_count) do |index|
+    (first_date + index.days).to_s("%Y%m%d").to_u64
+  end
+end
+
 OptionParser.parse do |parser|
   parser.banner = "Usage: crystal run scripts/volume_load_test.cr -- [options]"
 
-  parser.on("--sizes=list", "Comma-separated key counts (default: #{sizes.join(",")})") { |value| sizes = parse_sizes(value) }
-  parser.on("--bucket-count=count", "Buckets per key (default: #{bucket_count})") { |value| bucket_count = value.to_i }
-  parser.on("--batch-size=count", "Items/keys per batch request (default: #{batch_size})") { |value| batch_size = value.to_i }
+  parser.on("--profile=name", "Preset profile: default, year-356 (default: #{profile})") { |value| profile = value }
+  parser.on("--sizes=list", "Comma-separated key counts (default: #{sizes.join(",")})") do |value|
+    sizes = parse_sizes(value)
+    sizes_overridden = true
+  end
+  parser.on("--bucket-count=count", "Buckets per key (default: #{bucket_count})") do |value|
+    bucket_count = value.to_i
+    bucket_count_overridden = true
+  end
+  parser.on("--batch-size=count", "Items/keys per batch request (default: #{batch_size})") do |value|
+    batch_size = value.to_i
+    batch_size_overridden = true
+  end
   parser.on("--single-rounds=count", "Single read/write rounds per size (default: #{single_rounds})") { |value| single_rounds = value.to_i }
   parser.on("--read-rounds=count", "Batch read rounds per size (default: #{read_rounds})") { |value| read_rounds = value.to_i }
   parser.on("--series=name", "Series name (default: #{series})") { |value| series = value }
@@ -64,6 +112,16 @@ OptionParser.parse do |parser|
     exit
   end
 end
+
+sizes, bucket_count, batch_size = apply_profile!(
+  profile,
+  sizes,
+  bucket_count,
+  batch_size,
+  sizes_overridden,
+  bucket_count_overridden,
+  batch_size_overridden
+)
 
 raise "bucket-count must be greater than 0" unless bucket_count > 0
 raise "batch-size must be greater than 0" unless batch_size > 0
@@ -129,14 +187,14 @@ def wal_bytes(dump_dir : String) : Int64
   File.exists?(path) ? File.size(path) : 0_i64
 end
 
-def seed_data!(cluster : Karma::Cluster, series : String, keys : Int32, bucket_count : Int32, first_bucket : UInt64, batch_size : Int32)
-  data_points = keys.to_i64 * bucket_count.to_i64
+def seed_data!(cluster : Karma::Cluster, series : String, keys : Int32, buckets : Array(UInt64), batch_size : Int32)
+  data_points = keys.to_i64 * buckets.size.to_i64
   benchmark("seed.series.batch_add", data_points) do |latencies|
     items = [] of Tuple(UInt64, UInt64, UInt64)
 
     (1..keys).each do |key|
-      bucket_count.times do |bucket_offset|
-        items << {key.to_u64, first_bucket + bucket_offset.to_u64, 1_u64}
+      buckets.each do |bucket|
+        items << {key.to_u64, bucket, 1_u64}
         next unless items.size >= batch_size
 
         started = Time.monotonic
@@ -192,10 +250,11 @@ begin
     end
 
     cluster = Karma::Cluster.new
-    data_points = keys.to_i64 * bucket_count.to_i64
-    last_bucket = first_bucket + bucket_count.to_u64 - 1_u64
+    buckets = bucket_sequence(first_bucket, bucket_count)
+    data_points = keys.to_i64 * buckets.size.to_i64
+    last_bucket = buckets.last
 
-    seed_result = seed_data!(cluster, series, keys, bucket_count, first_bucket, batch_size)
+    seed_result = seed_data!(cluster, series, keys, buckets, batch_size)
 
     single_sum = benchmark("single_sum_existing", single_rounds.to_i64) do |latencies|
       single_rounds.times do |index|
@@ -274,6 +333,7 @@ end
 if json_output
   puts({
     sizes:         sizes,
+    profile:       profile,
     bucket_count:  bucket_count,
     batch_size:    batch_size,
     single_rounds: single_rounds,
@@ -286,7 +346,7 @@ if json_output
   }.to_json)
 else
   puts "Karma volume load test"
-  puts "sizes=#{sizes.join(",")} bucket_count=#{bucket_count} batch_size=#{batch_size} single_rounds=#{single_rounds} read_rounds=#{read_rounds} wal=#{wal} wal_fsync=#{wal_fsync}"
+  puts "profile=#{profile} sizes=#{sizes.join(",")} bucket_count=#{bucket_count} batch_size=#{batch_size} single_rounds=#{single_rounds} read_rounds=#{read_rounds} wal=#{wal} wal_fsync=#{wal_fsync}"
   puts "keys data_points memory_mb snapshot_mb seed_items_per_sec single_sum_ops_sec single_increment_ops_sec batch_sum_keys_per_sec batch_sum_p95_ms summary_ms snapshot_ms restore_ms"
   results.each do |entry|
     puts [
