@@ -26,7 +26,7 @@ describe Karma::Server do
     end
     client = FakeClient.new(["12345"])
 
-    Karma::Server.allocate.handle(client)
+    Karma::ClientSession.new(client, Karma::Cluster.new).run
 
     parsed = parse_response(client.sent.first.strip)
     parsed["success"].as_bool.should be_false
