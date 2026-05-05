@@ -193,6 +193,14 @@ describe Karma::Cli do
     end
   end
 
+  it "rejects invalid integer command line flags" do
+    clear_cli_env
+
+    expect_raises(Karma::Error, "--port must be an integer") do
+      Karma::Cli.parse!(["--port=abc"])
+    end
+  end
+
   it "validates final configuration after environment and command line options" do
     clear_cli_env
 

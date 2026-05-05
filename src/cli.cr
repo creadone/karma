@@ -13,7 +13,7 @@ module Karma
         end
 
         parser.on("-p port", "--port=port", "Port to listen for connection (default: #{Karma.config.port})") do |port|
-          Karma.config.port = port.to_i32
+          Karma.config.port = int_flag(port, "--port")
         end
 
         parser.on("-d path", "--directory=path", "Directory for storing and loading dumps (default: #{Karma.config.dump_dir})") do |path|
@@ -37,27 +37,27 @@ module Karma
         end
 
         parser.on("--max-request-bytes=bytes", "Maximum request line size (default: #{Karma.config.max_request_bytes})") do |bytes|
-          Karma.config.max_request_bytes = bytes.to_i32
+          Karma.config.max_request_bytes = int_flag(bytes, "--max-request-bytes")
         end
 
         parser.on("--max-response-bytes=bytes", "Maximum response size; 0 disables the limit (default: #{Karma.config.max_response_bytes})") do |bytes|
-          Karma.config.max_response_bytes = bytes.to_i32
+          Karma.config.max_response_bytes = int_flag(bytes, "--max-response-bytes")
         end
 
         parser.on("--read-timeout=seconds", "Client read timeout in seconds (default: #{Karma.config.read_timeout_seconds})") do |seconds|
-          Karma.config.read_timeout_seconds = seconds.to_i32
+          Karma.config.read_timeout_seconds = int_flag(seconds, "--read-timeout")
         end
 
         parser.on("--write-timeout=seconds", "Client write timeout in seconds (default: #{Karma.config.write_timeout_seconds})") do |seconds|
-          Karma.config.write_timeout_seconds = seconds.to_i32
+          Karma.config.write_timeout_seconds = int_flag(seconds, "--write-timeout")
         end
 
         parser.on("--query-timeout-ms=ms", "Tree-level read timeout in milliseconds; 0 disables the limit (default: #{Karma.config.query_timeout_ms})") do |ms|
-          Karma.config.query_timeout_ms = ms.to_i32
+          Karma.config.query_timeout_ms = int_flag(ms, "--query-timeout-ms")
         end
 
         parser.on("--shutdown-timeout=seconds", "Seconds to wait for active clients on shutdown (default: #{Karma.config.shutdown_timeout_seconds})") do |seconds|
-          Karma.config.shutdown_timeout_seconds = seconds.to_i32
+          Karma.config.shutdown_timeout_seconds = int_flag(seconds, "--shutdown-timeout")
         end
 
         parser.on("--auth-token=token", "Require token field in client commands") do |token|
@@ -69,7 +69,7 @@ module Karma
         end
 
         parser.on("--dump-retention-per-tree=count", "Dumps to keep per tree after dump_all (default: #{Karma.config.dump_retention_per_tree})") do |count|
-          Karma.config.dump_retention_per_tree = count.to_i32
+          Karma.config.dump_retention_per_tree = int_flag(count, "--dump-retention-per-tree")
         end
 
         parser.on("--log=flag", "Enable structured JSON logs (default: #{Karma.config.log})") do |flag|
@@ -90,6 +90,12 @@ module Karma
 
       parser.parse(args)
       Karma.config.validate!
+    end
+
+    private def self.int_flag(value : String, option : String) : Int32
+      value.to_i32
+    rescue ArgumentError
+      raise Karma::Error.new("validation_error", "#{option} must be an integer")
     end
 
     private def self.bool_flag(value : String, option : String) : Bool
