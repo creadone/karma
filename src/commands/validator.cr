@@ -7,6 +7,8 @@ module Karma
       when "replication_entries"
         require_after_lsn(directive)
       when "snapshot_info"
+      when "snapshot_fetch"
+        require_tree_name(directive)
       when "create", "drop", "dump", "load", "reset"
         require_tree_name(directive)
       when "tree_info"

@@ -35,6 +35,16 @@ module Karma
         raise Karma::Error.new("validation_error", "Field stream_id is required")
     end
 
+    private def self.snapshot_file_from(object : Hash(String, JSON::Any)) : String
+      file = object["file"]?.try(&.as_s?) ||
+             raise Karma::Error.new("validation_error", "Field file is required")
+      raise Karma::Error.new("validation_error", "Field file must not be empty") if file.empty?
+      raise Karma::Error.new("validation_error", "Field file must be a snapshot basename") unless File.basename(file) == file
+      raise Karma::Error.new("validation_error", "Field file must end with .tree") unless file.ends_with?(Karma::Backup::DUMP_EXTENSION)
+
+      file
+    end
+
     private def self.mode_from(object : Hash(String, JSON::Any)) : String
       object["mode"]?.try(&.as_s?) ||
         raise Karma::Error.new("validation_error", "Field mode is required")
@@ -103,7 +113,7 @@ module Karma
 
     private def self.after_lsn_from(object : Hash(String, JSON::Any)) : UInt64
       value = object["after_lsn"]?.try(&.as_i64) ||
-        raise Karma::Error.new("validation_error", "Field after_lsn is required")
+              raise Karma::Error.new("validation_error", "Field after_lsn is required")
       raise Karma::Error.new("validation_error", "Field after_lsn must be greater than or equal to 0") if value < 0
 
       value.to_u64

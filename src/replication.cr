@@ -186,3 +186,4 @@ module Karma
 end
 
 require "./replication/poller"
+require "./replication/snapshot_client"

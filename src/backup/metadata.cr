@@ -14,6 +14,17 @@ module Karma
       def initialize(@tree : String, @file : String, @timestamp : Int64, @last_lsn : UInt64, @bytes : Int64)
       end
 
+      def self.from_response(object : JSON::Any) : SnapshotMetadata
+        hash = object.as_h
+        new(
+          hash["tree"].as_s,
+          hash["file"].as_s,
+          hash["timestamp"].as_i64,
+          hash["last_lsn"].as_i64.to_u64,
+          hash["bytes"].as_i64
+        )
+      end
+
       def to_response
         {
           tree:          tree,

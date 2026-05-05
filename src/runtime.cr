@@ -7,6 +7,7 @@ module Karma
     def self.build : Runtime
       Karma.config.validate!
       Karma::Recovery.load!(Karma.config.dump_dir)
+      bootstrap_slave_snapshots
 
       cluster = if Karma.config.restore
                   Cluster.restore_with_wal(Karma.config.dump_dir)
@@ -16,6 +17,17 @@ module Karma
       Karma::Replication.bootstrap_from_snapshots(Karma.config.dump_dir) if Karma.config.role == "slave" && Karma.config.restore
 
       new(cluster, Server.new(cluster), Replication::Poller.build?(cluster))
+    end
+
+    private def self.bootstrap_slave_snapshots : Nil
+      return unless Karma.config.role == "slave"
+      return unless Karma.config.restore
+      return unless Karma::Backup.dumps(Karma.config.dump_dir).empty?
+
+      Karma::Replication::SnapshotClient.build?.try do |client|
+        lsn = client.bootstrap_files(Karma.config.dump_dir)
+        Karma::Log.info("replication.snapshot_bootstrap", "last_lsn=#{lsn}") if lsn > 0
+      end
     end
 
     def initialize(@cluster : Cluster, @server : Server, @replication_poller : Replication::Poller? = nil)

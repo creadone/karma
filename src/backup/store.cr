@@ -1,7 +1,43 @@
 require "random/secure"
+require "base64"
 
 module Karma
   module Backup
+    def self.fetch(file_path : String)
+      raise Karma::Error.new("not_found", "Snapshot \"#{File.basename(file_path)}\" not found") unless File.exists?(file_path)
+
+      metadata = snapshot_metadata(file_path)
+      {
+        metadata:    metadata.to_response,
+        data_base64: Base64.strict_encode(File.read(file_path)),
+      }
+    end
+
+    def self.install(file_name : String, data : Bytes, metadata : SnapshotMetadata, dump_dir = Karma.config.dump_dir) : String
+      validate_snapshot_file_name!(file_name)
+      raise Karma::Error.new("validation_error", "Snapshot metadata file mismatch") unless metadata.file == file_name
+      raise Karma::Error.new("validation_error", "Snapshot metadata tree mismatch") unless metadata.tree == dump_tree_name(file_name)
+
+      dump_dir = File.expand_path(dump_dir)
+      Dir.mkdir_p(dump_dir) unless Dir.exists?(dump_dir)
+      file_path = File.join(dump_dir, file_name)
+      temp_path = File.join(
+        dump_dir,
+        ".#{file_name}.#{Process.pid}.#{Random::Secure.hex(8)}.tmp"
+      )
+
+      File.open(temp_path, "wb") do |io|
+        io.write data
+        io.flush
+        io.fsync
+      end
+      File.rename(temp_path, file_path)
+      write_metadata(file_path, metadata.tree, metadata.last_lsn)
+      file_path
+    ensure
+      File.delete(temp_path) if temp_path && File.exists?(temp_path)
+    end
+
     def self.load(cluster, file_path, tree_name)
       if File.exists?(file_path)
         File.open(file_path) do |file|
@@ -63,6 +99,11 @@ module Karma
 
     private def self.snapshot_lsn : UInt64
       Karma.config.role == "slave" ? Karma::Replication.replayed_lsn : Karma::Wal.current_lsn
+    end
+
+    private def self.validate_snapshot_file_name!(file_name : String) : Nil
+      raise Karma::Error.new("validation_error", "Snapshot file must be a basename") unless File.basename(file_name) == file_name
+      raise Karma::Error.new("validation_error", "Snapshot file must end with .tree") unless file_name.ends_with?(DUMP_EXTENSION)
     end
 
     private def self.write_metadata(file_path : String, tree_name : String, last_lsn : UInt64) : Nil

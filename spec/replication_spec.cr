@@ -24,6 +24,24 @@ private class FakeReplicationPoller < Karma::Replication::Poller
   end
 end
 
+private class FakeSnapshotClient < Karma::Replication::SnapshotClient
+  def initialize(@info_response : JSON::Any, @fetch_responses : Hash(String, JSON::Any))
+    super("fake-master", 0)
+  end
+
+  protected def request(payload : String) : JSON::Any
+    parsed = JSON.parse(payload)
+    case parsed["op"].as_s
+    when "snapshot.info"
+      @info_response
+    when "snapshot.fetch"
+      @fetch_responses[parsed["file"].as_s]
+    else
+      raise "Unexpected op #{parsed["op"].as_s}"
+    end
+  end
+end
+
 describe Karma::Replication do
   it "applies WAL entries on a slave without appending local WAL" do
     master_dir = File.expand_path(".spec_replication_master_#{Time.local.to_unix_ms}")
@@ -101,6 +119,26 @@ describe Karma::Replication do
     Karma::Replication.replayed_lsn(dump_dir).should eq(2_u64)
   ensure
     Karma.configure { |c| c.role = "master" }
+  end
+
+  it "installs remote snapshots for empty slave bootstrap" do
+    master_dir = File.expand_path(".spec_replication_remote_master_#{Time.local.to_unix_ms}")
+    slave_dir = File.expand_path(".spec_replication_remote_slave_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = master_dir }
+    master = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "links", key: 42_u64, value: 7_u64}.to_json, master)
+    master.dump_all
+    file = File.basename(Karma::Backup.dumps(master_dir).first)
+    info = JSON.parse(Karma::Backup.info(master_dir).to_json)
+    fetch = JSON.parse(Karma::Backup.fetch(File.join(master_dir, file)).to_json)
+    client = FakeSnapshotClient.new(info, {file => fetch})
+
+    client.bootstrap_files(slave_dir).should eq(1_u64)
+    Karma::Backup.restore_lsn(slave_dir).should eq(1_u64)
+    restored = Karma::Cluster.restore(slave_dir)
+
+    restored.get("links").sum(42_u64).should eq(7_u64)
   end
 
   it "skips already replayed entries and applies the next LSN" do

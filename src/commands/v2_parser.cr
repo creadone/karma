@@ -84,8 +84,9 @@ module Karma
       when "snapshot.list"
         Directive.new("dumps", token: token, protocol_version: 2_u32)
       when "snapshot.load"
-        file = object["file"]?.try(&.as_s?) || raise Karma::Error.new("validation_error", "Field file is required")
-        Directive.new("load", tree_name: file, token: token, protocol_version: 2_u32)
+        Directive.new("load", tree_name: snapshot_file_from(object), token: token, protocol_version: 2_u32)
+      when "snapshot.fetch"
+        Directive.new("snapshot_fetch", tree_name: snapshot_file_from(object), token: token, protocol_version: 2_u32)
       when "snapshot.verify"
         Directive.new("verify", token: token, protocol_version: 2_u32)
       when "ingest.begin"

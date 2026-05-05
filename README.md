@@ -589,6 +589,7 @@ Create, list, load, verify, and inspect snapshots:
 {"v":2,"op":"snapshot.create_all"}
 {"v":2,"op":"snapshot.list"}
 {"v":2,"op":"snapshot.load","file":"1777925811_links.tree"}
+{"v":2,"op":"snapshot.fetch","file":"1777925811_links.tree"}
 {"v":2,"op":"snapshot.verify"}
 {"v":2,"op":"snapshot.info"}
 ```
@@ -640,6 +641,14 @@ bin/karma \
   --replication-source-port=8080 \
   --replication-token=read-secret
 ```
+
+If the slave data directory has no local snapshots and `--restore=true`, a
+slave with `--replication-source-host` first calls `snapshot.info` and
+`snapshot.fetch` on the master, installs the latest snapshot for each tree, then
+sets `karma.replication.lsn` from snapshot metadata before polling WAL entries.
+`snapshot.fetch` returns base64-encoded snapshot bytes and is intended for
+bootstrap; very large snapshots may require raising `--max-response-bytes` or a
+future chunked/object-storage transport.
 
 ### Legacy v1
 

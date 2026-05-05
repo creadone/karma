@@ -348,6 +348,28 @@ describe "operations commands" do
     info["wal_current_lsn"].as_i.should be > 0
   end
 
+  it "fetches snapshot content for remote bootstrap" do
+    dump_dir = File.expand_path(".spec_snapshot_fetch_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    cluster.dump_all
+    file = File.basename(Karma::Backup.dumps(dump_dir).first)
+
+    parsed = parse_response(Karma::Commands.call({v: 2, op: "snapshot.fetch", file: file}.to_json, cluster))
+    response = parsed["response"]
+
+    parsed["protocol_version"].as_i.should eq(2)
+    parsed["success"].as_bool.should be_true
+    response["metadata"]["file"].as_s.should eq(file)
+    Base64.decode_string(response["data_base64"].as_s).bytesize.should eq(File.size(File.join(dump_dir, file)))
+
+    bad = parse_response(Karma::Commands.call({v: 2, op: "snapshot.fetch", file: "../#{file}"}.to_json, cluster))
+    bad["success"].as_bool.should be_false
+    bad["error_code"].as_s.should eq("validation_error")
+  end
+
   it "verifies restorable WAL while command lock is held" do
     dump_dir = File.expand_path(".spec_verify_wal_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }
