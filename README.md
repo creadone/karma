@@ -579,6 +579,23 @@ Local test results on this development machine:
 Actual production throughput depends on CPU, disk, filesystem, container
 runtime, network, and workload mix.
 
+Run the in-process command-layer load test:
+
+```sh
+crystal build --release scripts/load_test.cr -o bin/karma_load_test
+bin/karma_load_test
+```
+
+Smaller smoke run:
+
+```sh
+crystal run scripts/load_test.cr -- \
+  --keys=1000 \
+  --batch-size=100 \
+  --single-rounds=1000 \
+  --read-rounds=10
+```
+
 ## Development
 
 Run tests:
