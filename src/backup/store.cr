@@ -32,7 +32,7 @@ module Karma
         end
 
         File.rename(temp_path, file_path)
-        write_metadata(file_path, tree_name, Karma::Wal.current_lsn)
+        write_metadata(file_path, tree_name, snapshot_lsn)
         Karma::Log.info("backup.dump", "tree=#{tree_name} path=#{file_path}")
         true
       else
@@ -59,6 +59,10 @@ module Karma
         end
       Karma::Log.info("backup.prune", "removed=#{removed}") if removed > 0
       removed
+    end
+
+    private def self.snapshot_lsn : UInt64
+      Karma.config.role == "slave" ? Karma::Replication.replayed_lsn : Karma::Wal.current_lsn
     end
 
     private def self.write_metadata(file_path : String, tree_name : String, last_lsn : UInt64) : Nil

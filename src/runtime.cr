@@ -13,6 +13,7 @@ module Karma
                 else
                   Cluster.new
                 end
+      Karma::Replication.bootstrap_from_snapshots(Karma.config.dump_dir) if Karma.config.role == "slave" && Karma.config.restore
 
       new(cluster, Server.new(cluster), Replication::Poller.build?(cluster))
     end

@@ -9,6 +9,11 @@ module Karma
         dump_path = File.join(dump_dir, dump_name)
 
         if Karma::Backup.load(cluster, dump_path, tree_name)
+          if Karma.config.role == "slave"
+            metadata = Karma::Backup.snapshot_metadata(dump_path)
+            Karma::Replication.checkpoint(metadata.last_lsn, dump_dir) if metadata.last_lsn > 0
+          end
+
           "Tree \"#{tree_name}\" loaded"
         end
       end

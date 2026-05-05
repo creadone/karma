@@ -754,6 +754,11 @@ Each new snapshot also gets a sidecar metadata file named
 and `last_lsn`, which is the WAL LSN covered by that snapshot. `snapshot.info`
 returns `last_snapshot_lsn` and per-tree `last_lsn` values.
 
+On master nodes, snapshot `last_lsn` is the current local WAL LSN. On slave
+nodes, it is the last replayed master LSN from `karma.replication.lsn`; this
+allows a restored slave snapshot to resume polling from the snapshot boundary
+instead of replaying from zero.
+
 Recovery checkpoint metadata is stored separately in `recovery.json` in the
 same directory. It records external source positions such as ClickHouse export
 ids or durable queue offsets. It is loaded on startup before serving commands.
@@ -762,6 +767,8 @@ Startup with `--restore=true`:
 
 1. Load the latest snapshot per tree.
 2. Replay WAL entries.
+3. On slave nodes, bootstrap `karma.replication.lsn` from snapshot metadata
+   before polling the master.
 
 `snapshot.create_all` / legacy `dump_all`:
 

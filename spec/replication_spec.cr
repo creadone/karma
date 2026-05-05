@@ -60,6 +60,49 @@ describe Karma::Replication do
     Karma::Replication.replayed_lsn(dump_dir).should eq(7_u64)
   end
 
+  it "stores replayed LSN in slave snapshots" do
+    dump_dir = File.expand_path(".spec_replication_snapshot_lsn_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.role = "slave"
+    end
+    cluster = Karma::Cluster.new
+
+    Karma::Replication.apply([
+      replication_entry(1_u64, 42_u64, 2_u64),
+      replication_entry(2_u64, 43_u64, 3_u64),
+    ], cluster, dump_dir)
+    cluster.dump_all
+
+    snapshot = Karma::Backup.latest_snapshot_metadata_by_tree(dump_dir).first
+    snapshot.last_lsn.should eq(2_u64)
+    Karma::Backup.restore_lsn(dump_dir).should eq(2_u64)
+  ensure
+    Karma.configure { |c| c.role = "master" }
+  end
+
+  it "bootstraps replayed LSN from restored slave snapshots" do
+    dump_dir = File.expand_path(".spec_replication_bootstrap_snapshot_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.role = "slave"
+    end
+    cluster = Karma::Cluster.new
+
+    Karma::Replication.apply([
+      replication_entry(1_u64, 42_u64, 2_u64),
+      replication_entry(2_u64, 43_u64, 3_u64),
+    ], cluster, dump_dir)
+    cluster.dump_all
+    File.delete(Karma::Replication.lsn_path(dump_dir))
+    Karma::Replication.reset!
+
+    Karma::Replication.bootstrap_from_snapshots(dump_dir).should eq(2_u64)
+    Karma::Replication.replayed_lsn(dump_dir).should eq(2_u64)
+  ensure
+    Karma.configure { |c| c.role = "master" }
+  end
+
   it "skips already replayed entries and applies the next LSN" do
     dump_dir = File.expand_path(".spec_replication_skip_#{Time.local.to_unix_ms}")
     cluster = Karma::Cluster.new

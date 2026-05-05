@@ -44,6 +44,22 @@ module Karma
         .reverse
     end
 
+    def self.latest_snapshot_metadata_by_tree(dump_dir) : Array(SnapshotMetadata)
+      dumps(dump_dir)
+        .group_by { |path| dump_tree_name(path) }
+        .map do |_, paths|
+          latest = paths.max_by { |path| dump_timestamp(path) }
+          snapshot_metadata(latest)
+        end
+    end
+
+    def self.restore_lsn(dump_dir) : UInt64
+      snapshots = latest_snapshot_metadata_by_tree(dump_dir)
+      return 0_u64 if snapshots.empty?
+
+      snapshots.min_of(&.last_lsn)
+    end
+
     def self.metadata_path(file_path) : String
       "#{file_path}#{METADATA_EXTENSION}"
     end

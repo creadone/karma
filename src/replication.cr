@@ -38,6 +38,21 @@ module Karma
       lsn
     end
 
+    def self.bootstrap_from_snapshots(dump_dir = Karma.config.dump_dir) : UInt64
+      snapshot_lsn = Karma::Backup.restore_lsn(dump_dir)
+      current = replayed_lsn(dump_dir)
+      return current if snapshot_lsn == 0_u64
+      return current if current == snapshot_lsn
+      if current > snapshot_lsn
+        raise Karma::Error.new(
+          "replication_error",
+          "Replication LSN #{current} is ahead of snapshot LSN #{snapshot_lsn}"
+        )
+      end
+
+      checkpoint(snapshot_lsn, dump_dir)
+    end
+
     def self.replayed_lsn(dump_dir = Karma.config.dump_dir) : UInt64
       LSN_MUTEX.synchronize do
         ensure_lsn_loaded(dump_dir)

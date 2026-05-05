@@ -13,10 +13,7 @@ module Karma
 
     def self.info(dump_dir)
       dump_paths = dumps(dump_dir)
-      latest_by_tree = dump_paths.group_by { |path| dump_tree_name(path) }.map do |tree_name, paths|
-        latest = paths.max_by { |path| dump_timestamp(path) }
-        snapshot_metadata(latest).to_response
-      end
+      latest_by_tree = latest_snapshot_metadata_by_tree(dump_dir).map(&.to_response)
 
       wal_path = Karma::Wal.path(dump_dir)
       {
