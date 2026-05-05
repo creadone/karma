@@ -350,6 +350,9 @@ Add many `[key, bucket, value]` items in one request:
 }
 ```
 
+Large batches must fit `--max-request-bytes`; increase it for backfill or
+streaming ingest clients.
+
 ### tree.series
 
 Read daily values for all keys in a series:

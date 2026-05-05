@@ -130,9 +130,14 @@ module Karma
       snapshot_info
     ]
 
-    def self.call(message, cluster, persist = true, authorize = true, synchronize = true, track_legacy = true)
+    def self.call(message, cluster, persist = true, authorize = true, synchronize = true, track_legacy = true, enforce_request_size = true)
       started_at = Time.monotonic
       protocol_version = request_protocol_version(message)
+      if enforce_request_size && request_too_large?(message)
+        Karma::Operations.record_command(false, elapsed_ms(started_at))
+        return Karma::Protocol.error("request_too_large", "Request exceeds #{Karma.config.max_request_bytes} bytes", protocol_version)
+      end
+
       begin
         directive = parse(message)
         protocol_version = directive.protocol_version
@@ -193,6 +198,11 @@ module Karma
 
     private def self.elapsed_ms(started_at : Time::Span) : Float64
       (Time.monotonic - started_at).total_milliseconds
+    end
+
+    private def self.request_too_large?(message : String) : Bool
+      max_request_bytes = Karma.config.max_request_bytes
+      max_request_bytes > 0 && message.bytesize > max_request_bytes
     end
 
     private def self.response_too_large?(response : String) : Bool

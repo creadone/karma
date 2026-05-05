@@ -60,6 +60,24 @@ describe Karma::Commands do
     expect_error(response, "invalid_json")
   end
 
+  it "rejects direct commands that exceed max request bytes" do
+    Karma.configure { |c| c.max_request_bytes = 40 }
+    cluster = Karma::Cluster.new
+
+    response = Karma::Commands.call({
+      v:     2,
+      op:    "system.ping",
+      token: "large-token-value",
+    }.to_json, cluster)
+    parsed = parse_response(response)
+
+    parsed["protocol_version"].as_i.should eq(2)
+    parsed["success"].as_bool.should be_false
+    parsed["error_code"].as_s.should eq("request_too_large")
+  ensure
+    Karma.configure { |c| c.max_request_bytes = 4096 }
+  end
+
   it "requires token when auth is configured" do
     Karma.configure { |c| c.auth_token = "secret" }
     cluster = Karma::Cluster.new
@@ -286,6 +304,49 @@ describe Karma::Commands do
 
     parsed["success"].as_bool.should be_true
     parsed["response"].as_a.should be_empty
+  end
+
+  it "supports max-size v2 batch add and batch sum when byte limits allow it" do
+    Karma.configure do |c|
+      c.max_request_bytes = 1_048_576
+      c.max_response_bytes = 1_048_576
+    end
+    cluster = Karma::Cluster.new
+    keys = (1_u64..10_000_u64).to_a
+    items = keys.map { |key| [key, 20260505_u64, 1_u64] }
+
+    add_response = Karma::Commands.call({
+      v:      2,
+      op:     "series.batch_add",
+      series: "links",
+      items:  items,
+    }.to_json, cluster)
+    add = parse_response(add_response)
+
+    add["success"].as_bool.should be_true
+    add["response"]["applied"].as_i.should eq(10_000)
+    add["response"]["total"].as_i.should eq(10_000)
+
+    sum_response = Karma::Commands.call({
+      v:      2,
+      op:     "counter.batch_sum",
+      series: "links",
+      keys:   keys,
+    }.to_json, cluster)
+    sums = parse_response(sum_response)
+    values = sums["response"].as_a
+
+    sums["success"].as_bool.should be_true
+    values.size.should eq(10_000)
+    values.first["key"].as_i.should eq(1)
+    values.first["value"].as_i.should eq(1)
+    values.last["key"].as_i.should eq(10_000)
+    values.last["value"].as_i.should eq(1)
+  ensure
+    Karma.configure do |c|
+      c.max_request_bytes = 4096
+      c.max_response_bytes = 1_048_576
+    end
   end
 
   it "rejects responses that exceed max response bytes" do
