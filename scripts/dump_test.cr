@@ -1,6 +1,4 @@
-require "../src/config"
-require "../src/cluster"
-require "../src/backup"
+require "../src/karma"
 
 dump_dir = "/tmp/.dumps_eval"
 Karma.configure { |c| c.dump_dir = dump_dir }
@@ -15,4 +13,3 @@ sleep 200.milliseconds
 
 files = Dir.glob(File.join(dump_dir, "*.tree"))
 puts files.size
-

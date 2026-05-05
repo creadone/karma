@@ -1,18 +1,7 @@
 require "json"
 require "option_parser"
 
-require "../src/config"
-require "../src/protocol"
-require "../src/time_series"
-require "../src/ingest"
-require "../src/query_deadline"
-require "../src/cluster"
-require "../src/state"
-require "../src/backup"
-require "../src/wal"
-require "../src/log"
-require "../src/operations"
-require "../src/command"
+require "../src/karma"
 
 keys = 10_000
 batch_size = 1_000

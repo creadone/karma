@@ -612,6 +612,28 @@ crystal run scripts/load_test.cr -- \
   --read-rounds=10
 ```
 
+Run the TCP load test against a real loopback Karma server:
+
+```sh
+crystal build --release scripts/tcp_load_test.cr -o bin/karma_tcp_load_test
+bin/karma_tcp_load_test \
+  --clients=4 \
+  --wal=true \
+  --wal-fsync=false
+```
+
+For the conservative WAL path, use `--wal-fsync=true`.
+
+Run CSV reconciliation against ClickHouse/exported aggregates:
+
+```sh
+crystal run scripts/reconcile_csv.cr -- \
+  --host=127.0.0.1 \
+  --port=8080 \
+  --series=links \
+  --csv=clickhouse-links.csv
+```
+
 ## Development
 
 Run tests:

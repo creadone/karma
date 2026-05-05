@@ -3,6 +3,8 @@
 !/lib/counter_tree/**
 /bin/
 /.shards/
+.DS_Store
+.spec_*/
 *.dwarf
 *.tree
 *.wal
