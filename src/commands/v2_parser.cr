@@ -87,6 +87,8 @@ module Karma
         Directive.new("load", tree_name: snapshot_file_from(object), token: token, protocol_version: 2_u32)
       when "snapshot.fetch"
         Directive.new("snapshot_fetch", tree_name: snapshot_file_from(object), token: token, protocol_version: 2_u32)
+      when "snapshot.fetch_chunk"
+        Directive.new("snapshot_fetch_chunk", tree_name: snapshot_file_from(object), cursor: offset_from(object), limit: limit_from(object), token: token, protocol_version: 2_u32)
       when "snapshot.verify"
         Directive.new("verify", token: token, protocol_version: 2_u32)
       when "ingest.begin"

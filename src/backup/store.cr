@@ -13,7 +13,43 @@ module Karma
       }
     end
 
+    def self.fetch_chunk(file_path : String, offset : UInt64 = 0_u64, limit : Int32 = SNAPSHOT_CHUNK_DEFAULT_BYTES)
+      raise Karma::Error.new("not_found", "Snapshot \"#{File.basename(file_path)}\" not found") unless File.exists?(file_path)
+      validate_snapshot_chunk_limit!(limit)
+
+      total_bytes = File.size(file_path).to_u64
+      raise Karma::Error.new("validation_error", "Field offset exceeds snapshot size") if offset > total_bytes
+
+      bytes_to_read = Math.min(limit.to_u64, total_bytes - offset).to_i
+      data = Bytes.new(bytes_to_read)
+      bytes_read = 0
+
+      File.open(file_path, "rb") do |file|
+        file.seek(offset.to_i64)
+        bytes_read = file.read(data)
+      end
+      chunk = data[0, bytes_read]
+      next_offset = offset + bytes_read.to_u64
+
+      {
+        metadata:    snapshot_metadata(file_path).to_response,
+        offset:      offset,
+        limit:       limit,
+        bytes:       bytes_read,
+        total_bytes: total_bytes,
+        next_offset: next_offset,
+        done:        next_offset >= total_bytes,
+        data_base64: Base64.strict_encode(chunk),
+      }
+    end
+
     def self.install(file_name : String, data : Bytes, metadata : SnapshotMetadata, dump_dir = Karma.config.dump_dir) : String
+      install_stream(file_name, metadata, dump_dir) do |io|
+        io.write data
+      end
+    end
+
+    def self.install_stream(file_name : String, metadata : SnapshotMetadata, dump_dir = Karma.config.dump_dir, &) : String
       validate_snapshot_file_name!(file_name)
       raise Karma::Error.new("validation_error", "Snapshot metadata file mismatch") unless metadata.file == file_name
       raise Karma::Error.new("validation_error", "Snapshot metadata tree mismatch") unless metadata.tree == dump_tree_name(file_name)
@@ -27,7 +63,7 @@ module Karma
       )
 
       File.open(temp_path, "wb") do |io|
-        io.write data
+        yield io
         io.flush
         io.fsync
       end
@@ -104,6 +140,11 @@ module Karma
     private def self.validate_snapshot_file_name!(file_name : String) : Nil
       raise Karma::Error.new("validation_error", "Snapshot file must be a basename") unless File.basename(file_name) == file_name
       raise Karma::Error.new("validation_error", "Snapshot file must end with .tree") unless file_name.ends_with?(DUMP_EXTENSION)
+    end
+
+    private def self.validate_snapshot_chunk_limit!(limit : Int32) : Nil
+      raise Karma::Error.new("validation_error", "Field limit must be greater than 0") if limit <= 0
+      raise Karma::Error.new("validation_error", "Field limit exceeds max size") if limit > SNAPSHOT_CHUNK_MAX_BYTES
     end
 
     private def self.write_metadata(file_path : String, tree_name : String, last_lsn : UInt64) : Nil

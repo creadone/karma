@@ -590,6 +590,7 @@ Create, list, load, verify, and inspect snapshots:
 {"v":2,"op":"snapshot.list"}
 {"v":2,"op":"snapshot.load","file":"1777925811_links.tree"}
 {"v":2,"op":"snapshot.fetch","file":"1777925811_links.tree"}
+{"v":2,"op":"snapshot.fetch_chunk","file":"1777925811_links.tree","offset":0,"limit":262144}
 {"v":2,"op":"snapshot.verify"}
 {"v":2,"op":"snapshot.info"}
 ```
@@ -644,11 +645,13 @@ bin/karma \
 
 If the slave data directory has no local snapshots and `--restore=true`, a
 slave with `--replication-source-host` first calls `snapshot.info` and
-`snapshot.fetch` on the master, installs the latest snapshot for each tree, then
-sets `karma.replication.lsn` from snapshot metadata before polling WAL entries.
-`snapshot.fetch` returns base64-encoded snapshot bytes and is intended for
-bootstrap; very large snapshots may require raising `--max-response-bytes` or a
-future chunked/object-storage transport.
+`snapshot.fetch_chunk` on the master, installs the latest snapshot for each
+tree, then sets `karma.replication.lsn` from snapshot metadata before polling
+WAL entries.
+`snapshot.fetch` returns base64-encoded snapshot bytes and is intended for small
+manual bootstrap checks. Automated slave bootstrap uses `snapshot.fetch_chunk`
+with bounded chunks. Very large snapshots may still be better served through a
+future object-storage transport.
 
 ### Legacy v1
 

@@ -111,6 +111,15 @@ module Karma
       end
     end
 
+    private def self.offset_from(object : Hash(String, JSON::Any)) : UInt64?
+      object["offset"]?.try do |offset|
+        value = offset.as_i64
+        raise Karma::Error.new("validation_error", "Field offset must be greater than or equal to 0") if value < 0
+
+        value.to_u64
+      end
+    end
+
     private def self.after_lsn_from(object : Hash(String, JSON::Any)) : UInt64
       value = object["after_lsn"]?.try(&.as_i64) ||
               raise Karma::Error.new("validation_error", "Field after_lsn is required")

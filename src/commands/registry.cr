@@ -34,6 +34,7 @@ module Karma
       "tree_top"              => Commands::TreeTop,
       "snapshot_info"         => Commands::SnapshotInfo,
       "snapshot_fetch"        => Commands::SnapshotFetch,
+      "snapshot_fetch_chunk"  => Commands::SnapshotFetchChunk,
       "ingest_begin"          => Commands::IngestBegin,
       "ingest_chunk"          => Commands::IngestChunk,
       "ingest_commit"         => Commands::IngestCommit,
@@ -57,6 +58,7 @@ module Karma
       tree_top
       snapshot_info
       snapshot_fetch
+      snapshot_fetch_chunk
       recovery_status
       replication_status
       replication_entries

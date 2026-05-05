@@ -9,6 +9,8 @@ module Karma
       when "snapshot_info"
       when "snapshot_fetch"
         require_tree_name(directive)
+      when "snapshot_fetch_chunk"
+        require_snapshot_chunk(directive)
       when "create", "drop", "dump", "load", "reset"
         require_tree_name(directive)
       when "tree_info"

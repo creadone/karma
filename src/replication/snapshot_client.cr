@@ -48,19 +48,45 @@ module Karma
       end
 
       private def fetch_and_install(file_name : String, dump_dir : String) : String
-        response = request(command_json("snapshot.fetch", file_name))
-        metadata = Karma::Backup::SnapshotMetadata.from_response(response["metadata"])
-        data = Base64.decode(response["data_base64"].as_s)
+        first_chunk = request_chunk(file_name, 0_u64)
+        metadata = Karma::Backup::SnapshotMetadata.from_response(first_chunk["metadata"])
 
-        Karma::Backup.install(file_name, data, metadata, dump_dir)
+        Karma::Backup.install_stream(file_name, metadata, dump_dir) do |io|
+          chunk = first_chunk
+          loop do
+            ensure_same_snapshot!(metadata, chunk)
+            io.write Base64.decode(chunk["data_base64"].as_s)
+            break if chunk["done"].as_bool
+
+            chunk = request_chunk(file_name, chunk["next_offset"].as_i64.to_u64)
+          end
+        end
       end
 
-      private def command_json(op : String, file_name : String? = nil) : String
+      private def request_chunk(file_name : String, offset : UInt64) : JSON::Any
+        request(command_json(
+          "snapshot.fetch_chunk",
+          file_name,
+          offset,
+          Karma::Backup::SNAPSHOT_CHUNK_DEFAULT_BYTES
+        ))
+      end
+
+      private def ensure_same_snapshot!(expected : Karma::Backup::SnapshotMetadata, response : JSON::Any) : Nil
+        actual = Karma::Backup::SnapshotMetadata.from_response(response["metadata"])
+        return if actual.file == expected.file && actual.last_lsn == expected.last_lsn && actual.bytes == expected.bytes
+
+        raise Karma::Error.new("replication_error", "Snapshot changed during fetch")
+      end
+
+      private def command_json(op : String, file_name : String? = nil, offset : UInt64? = nil, limit : Int32? = nil) : String
         JSON.build do |json|
           json.object do
             json.field "v", 2
             json.field "op", op
             json.field "file", file_name if file_name
+            json.field "offset", offset if offset
+            json.field "limit", limit if limit
             json.field "token", @token if @token
           end
         end

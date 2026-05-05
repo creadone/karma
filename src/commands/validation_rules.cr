@@ -97,6 +97,11 @@ module Karma
       require_limit(directive, default: 1_000, max: 10_000)
     end
 
+    private def self.require_snapshot_chunk(directive : Directive) : Nil
+      require_tree_name(directive)
+      require_limit(directive, default: Karma::Backup::SNAPSHOT_CHUNK_DEFAULT_BYTES, max: Karma::Backup::SNAPSHOT_CHUNK_MAX_BYTES)
+    end
+
     private def self.require_positive_value(directive : Directive) : Nil
       return if directive.value.as(UInt64) > 0_u64
 

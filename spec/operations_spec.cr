@@ -365,6 +365,32 @@ describe "operations commands" do
     response["metadata"]["file"].as_s.should eq(file)
     Base64.decode_string(response["data_base64"].as_s).bytesize.should eq(File.size(File.join(dump_dir, file)))
 
+    io = IO::Memory.new
+    offset = 0_u64
+    loop do
+      chunk = parse_response(Karma::Commands.call({
+        v:      2,
+        op:     "snapshot.fetch_chunk",
+        file:   file,
+        offset: offset,
+        limit:  16,
+      }.to_json, cluster))["response"]
+      io.write Base64.decode(chunk["data_base64"].as_s)
+      offset = chunk["next_offset"].as_i64.to_u64
+      break if chunk["done"].as_bool
+    end
+    io.to_slice.should eq(File.read(File.join(dump_dir, file)).to_slice)
+
+    bad_limit = parse_response(Karma::Commands.call({
+      v:      2,
+      op:     "snapshot.fetch_chunk",
+      file:   file,
+      offset: 0_u64,
+      limit:  Karma::Backup::SNAPSHOT_CHUNK_MAX_BYTES + 1,
+    }.to_json, cluster))
+    bad_limit["success"].as_bool.should be_false
+    bad_limit["error_code"].as_s.should eq("validation_error")
+
     bad = parse_response(Karma::Commands.call({v: 2, op: "snapshot.fetch", file: "../#{file}"}.to_json, cluster))
     bad["success"].as_bool.should be_false
     bad["error_code"].as_s.should eq("validation_error")

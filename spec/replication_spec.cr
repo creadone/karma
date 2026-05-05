@@ -25,7 +25,7 @@ private class FakeReplicationPoller < Karma::Replication::Poller
 end
 
 private class FakeSnapshotClient < Karma::Replication::SnapshotClient
-  def initialize(@info_response : JSON::Any, @fetch_responses : Hash(String, JSON::Any))
+  def initialize(@info_response : JSON::Any, @master_dir : String)
     super("fake-master", 0)
   end
 
@@ -34,8 +34,11 @@ private class FakeSnapshotClient < Karma::Replication::SnapshotClient
     case parsed["op"].as_s
     when "snapshot.info"
       @info_response
-    when "snapshot.fetch"
-      @fetch_responses[parsed["file"].as_s]
+    when "snapshot.fetch_chunk"
+      file = parsed["file"].as_s
+      offset = parsed["offset"].as_i64.to_u64
+      limit = parsed["limit"].as_i.to_i32
+      JSON.parse(Karma::Backup.fetch_chunk(File.join(@master_dir, file), offset, limit).to_json)
     else
       raise "Unexpected op #{parsed["op"].as_s}"
     end
@@ -131,8 +134,7 @@ describe Karma::Replication do
     master.dump_all
     file = File.basename(Karma::Backup.dumps(master_dir).first)
     info = JSON.parse(Karma::Backup.info(master_dir).to_json)
-    fetch = JSON.parse(Karma::Backup.fetch(File.join(master_dir, file)).to_json)
-    client = FakeSnapshotClient.new(info, {file => fetch})
+    client = FakeSnapshotClient.new(info, master_dir)
 
     client.bootstrap_files(slave_dir).should eq(1_u64)
     Karma::Backup.restore_lsn(slave_dir).should eq(1_u64)
