@@ -84,6 +84,14 @@ module Karma
       raise Karma::Error.new("validation_error", "Field max_abs_delta must be greater than or equal to 0") if (directive.max_abs_delta || 0_i64) < 0
     end
 
+    private def self.require_recovery_checkpoint(directive : Directive) : Nil
+      source = directive.source
+      raise Karma::Error.new("validation_error", "Field source is required") if source.nil? || source.empty?
+      raise Karma::Error.new("validation_error", "Field offset or event_id is required") if directive.source_offset.nil? && directive.event_id.nil?
+      raise Karma::Error.new("validation_error", "Field offset must not be empty") if directive.source_offset.try(&.empty?)
+      raise Karma::Error.new("validation_error", "Field event_id must not be empty") if directive.event_id.try(&.empty?)
+    end
+
     private def self.require_positive_value(directive : Directive) : Nil
       return if directive.value.as(UInt64) > 0_u64
 

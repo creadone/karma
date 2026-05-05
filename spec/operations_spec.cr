@@ -163,12 +163,16 @@ describe "operations commands" do
     stats["reconciliation_last_mismatch_count"].as_i.should eq(1)
     stats["reconciliation_last_absolute_drift"].as_i.should eq(7)
     stats["reconciliation_last_max_abs_delta"].as_i.should eq(5)
+    stats["recovery_checkpoint_count"].as_i.should be >= 0
+    stats["recovery_last_checkpoint_unix"].as_i.should be >= 0
 
     metrics = expect_success(Karma::Commands.call({command: "metrics"}.to_json, cluster))["response"].as_s
     metrics.should contain("karma_reconciliation_runs_total")
     metrics.should contain("karma_reconciliation_checked_points_total")
     metrics.should contain("karma_reconciliation_mismatches_total")
     metrics.should contain("karma_reconciliation_last_max_abs_delta 5")
+    metrics.should contain("karma_recovery_checkpoints")
+    metrics.should contain("karma_recovery_last_checkpoint_unix")
   end
 
   it "rejects invalid reconciliation reports" do

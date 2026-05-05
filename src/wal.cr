@@ -15,7 +15,7 @@ module Karma
     end
 
     def self.persist?(directive : Commands::Directive) : Bool
-      Commands.mutating?(directive)
+      Commands.mutating?(directive) && directive.command != "recovery_checkpoint"
     end
   end
 end

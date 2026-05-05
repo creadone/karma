@@ -50,6 +50,9 @@ module Karma
         Karma::Ingest.validate_stream_exists!(directive.stream_id.not_nil!)
       when "reconciliation_report"
         require_reconciliation_report(directive)
+      when "recovery_checkpoint"
+        require_recovery_checkpoint(directive)
+      when "recovery_status"
       when "find", "delete"
         require_tree_name(directive)
         require_complete_range(directive)

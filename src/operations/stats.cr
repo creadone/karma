@@ -37,6 +37,8 @@ module Karma
         reconciliation_last_mismatch_count: reconciliation_last_mismatch_count,
         reconciliation_last_absolute_drift: reconciliation_last_absolute_drift,
         reconciliation_last_max_abs_delta:  reconciliation_last_max_abs_delta,
+        recovery_checkpoint_count:          Karma::Recovery.checkpoint_count,
+        recovery_last_checkpoint_unix:      Karma::Recovery.last_checkpoint_unix,
         latency_ms_avg:                     average_latency_ms,
         latency_ms_last:                    last_latency_ms,
         ingest_active_streams:              ingest_metrics[:active_streams],

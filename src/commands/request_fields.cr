@@ -63,6 +63,30 @@ module Karma
       object["max_abs_delta"]?.try(&.as_i64) || 0_i64
     end
 
+    private def self.source_from(object : Hash(String, JSON::Any)) : String
+      object["source"]?.try(&.as_s?) ||
+        raise Karma::Error.new("validation_error", "Field source is required")
+    end
+
+    private def self.optional_source_from(object : Hash(String, JSON::Any)) : String?
+      object["source"]?.try(&.as_s?)
+    end
+
+    private def self.source_offset_from(object : Hash(String, JSON::Any)) : String?
+      stringish_from(object, "source_offset") || stringish_from(object, "offset")
+    end
+
+    private def self.event_id_from(object : Hash(String, JSON::Any)) : String?
+      stringish_from(object, "event_id")
+    end
+
+    private def self.stringish_from(object : Hash(String, JSON::Any), field : String) : String?
+      return nil unless value = object[field]?
+
+      value.as_s? || value.as_i64?.try(&.to_s) ||
+        raise Karma::Error.new("validation_error", "Field #{field} must be a string or integer")
+    end
+
     private def self.granularity_from(object : Hash(String, JSON::Any)) : String?
       object["granularity"]?.try(&.as_s?)
     end

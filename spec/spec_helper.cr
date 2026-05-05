@@ -5,6 +5,7 @@ Karma.configure { |c| c.log = false }
 
 Spec.before_each do
   Karma::Ingest.reset!
+  Karma::Recovery.reset!
 end
 
 def parse_response(response : String) : JSON::Any

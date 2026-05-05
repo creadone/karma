@@ -17,6 +17,10 @@ module Karma
         Directive.new("metrics", token: token, protocol_version: 2_u32)
       when "reconciliation.report"
         Directive.new("reconciliation_report", checked_points: checked_points_from(object), mismatch_count: mismatch_count_from(object), absolute_drift: absolute_drift_from(object), max_abs_delta: max_abs_delta_from(object), token: token, protocol_version: 2_u32)
+      when "recovery.checkpoint"
+        Directive.new("recovery_checkpoint", source: source_from(object), source_offset: source_offset_from(object), event_id: event_id_from(object), token: token, protocol_version: 2_u32)
+      when "recovery.status"
+        Directive.new("recovery_status", source: optional_source_from(object), token: token, protocol_version: 2_u32)
       when "snapshot.info"
         Directive.new("snapshot_info", token: token, protocol_version: 2_u32)
       when "tree.create"

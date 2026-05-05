@@ -23,6 +23,8 @@ module Karma
       "metrics"               => Commands::Metrics,
       "verify"                => Commands::Verify,
       "reconciliation_report" => Commands::ReconciliationReport,
+      "recovery_checkpoint"   => Commands::RecoveryCheckpoint,
+      "recovery_status"       => Commands::RecoveryStatus,
       "ping"                  => Commands::Ping,
       "tree_info"             => Commands::TreeInfo,
       "tree_keys"             => Commands::TreeKeys,
@@ -51,6 +53,7 @@ module Karma
       tree_summary
       tree_top
       snapshot_info
+      recovery_status
     ]
 
     MUTATING_COMMANDS = %w[
@@ -67,6 +70,7 @@ module Karma
       ingest_chunk
       ingest_commit
       ingest_abort
+      recovery_checkpoint
     ]
 
     def self.known?(directive : Directive) : Bool

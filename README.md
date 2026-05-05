@@ -569,6 +569,14 @@ Report reconciliation results from external checks:
 {"v":2,"op":"reconciliation.report","checked_points":1000,"mismatch_count":2,"absolute_drift":15,"max_abs_delta":10}
 ```
 
+Record and inspect recovery checkpoints for external ingestion sources:
+
+```json
+{"v":2,"op":"recovery.checkpoint","source":"clickhouse-links","offset":"export-2026-05-05","event_id":"batch-42"}
+{"v":2,"op":"recovery.status"}
+{"v":2,"op":"recovery.status","source":"clickhouse-links"}
+```
+
 ### Legacy v1
 
 Legacy clients can continue to use v1 `command` requests:
@@ -609,6 +617,8 @@ Metrics include:
 * `karma_reconciliation_last_mismatches`
 * `karma_reconciliation_last_absolute_drift`
 * `karma_reconciliation_last_max_abs_delta`
+* `karma_recovery_checkpoints`
+* `karma_recovery_last_checkpoint_unix`
 * `karma_command_latency_ms`
 * `karma_command_latency_ms_average`
 * `karma_ingest_active_streams`
@@ -658,6 +668,10 @@ Karma uses two persistence mechanisms:
 
 * snapshots: MessagePack `.tree` files, one per tree;
 * WAL: newline-delimited JSON commands in `karma.wal`.
+
+Recovery checkpoint metadata is stored separately in `recovery.json` in the
+same directory. It records external source positions such as ClickHouse export
+ids or durable queue offsets. It is loaded on startup before serving commands.
 
 Startup with `--restore=true`:
 

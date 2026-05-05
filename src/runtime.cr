@@ -5,6 +5,7 @@ module Karma
 
     def self.build : Runtime
       Karma.config.validate!
+      Karma::Recovery.load!(Karma.config.dump_dir)
 
       cluster = if Karma.config.restore
                   Cluster.restore_with_wal(Karma.config.dump_dir)

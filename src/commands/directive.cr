@@ -25,6 +25,9 @@ module Karma
       property mismatch_count : Int64?
       property absolute_drift : Int64?
       property max_abs_delta : Int64?
+      property source : String?
+      property source_offset : String?
+      property event_id : String?
       property protocol_version : UInt32 = 1_u32
 
       def initialize(
@@ -48,6 +51,9 @@ module Karma
         @mismatch_count : Int64? = nil,
         @absolute_drift : Int64? = nil,
         @max_abs_delta : Int64? = nil,
+        @source : String? = nil,
+        @source_offset : String? = nil,
+        @event_id : String? = nil,
         @protocol_version : UInt32 = 1_u32,
       )
       end
