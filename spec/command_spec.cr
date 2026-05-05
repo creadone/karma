@@ -498,6 +498,77 @@ describe Karma::Commands do
     cluster.get("links").sum(42_u64).should eq(10_u64)
   end
 
+  it "supports v2 streaming ingest set chunks" do
+    cluster = Karma::Cluster.new
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "links", key: 42_u64, bucket: 20260505_u64, value: 10_u64}.to_json, cluster)
+
+    Karma::Commands.call({v: 2, op: "ingest.begin", mode: "set", stream_id: "stream-set"}.to_json, cluster)
+    response = Karma::Commands.call({
+      v:         2,
+      op:        "ingest.chunk",
+      stream_id: "stream-set",
+      series:    "links",
+      chunk_seq: 1_u64,
+      items:     [[42_u64, 20260505_u64, 3_u64], [43_u64, 20260505_u64, 0_u64]],
+    }.to_json, cluster)
+    parsed = parse_response(response)
+
+    parsed["success"].as_bool.should be_true
+    cluster.get("links").sum(42_u64).should eq(3_u64)
+    cluster.get("links").sum(43_u64).should eq(0_u64)
+  end
+
+  it "supports v2 streaming ingest replace_series with atomic swap on commit" do
+    cluster = Karma::Cluster.new
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "links", key: 1_u64, bucket: 20260505_u64, value: 99_u64}.to_json, cluster)
+
+    Karma::Commands.call({v: 2, op: "ingest.begin", mode: "replace_series", stream_id: "stream-replace"}.to_json, cluster)
+    chunk = parse_response(Karma::Commands.call({
+      v:         2,
+      op:        "ingest.chunk",
+      stream_id: "stream-replace",
+      series:    "links",
+      chunk_seq: 1_u64,
+      items:     [[2_u64, 20260505_u64, 5_u64]],
+    }.to_json, cluster))
+
+    chunk["success"].as_bool.should be_true
+    cluster.get("links").sum(1_u64).should eq(99_u64)
+    cluster.get("links").sum(2_u64).should eq(0_u64)
+
+    commit = parse_response(Karma::Commands.call({v: 2, op: "ingest.commit", stream_id: "stream-replace"}.to_json, cluster))
+    commit["success"].as_bool.should be_true
+    cluster.get("links").sum(1_u64).should eq(0_u64)
+    cluster.get("links").sum(2_u64).should eq(5_u64)
+  end
+
+  it "rejects changing series inside one ingest stream" do
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "ingest.begin", mode: "add", stream_id: "stream-series"}.to_json, cluster)
+    Karma::Commands.call({
+      v:         2,
+      op:        "ingest.chunk",
+      stream_id: "stream-series",
+      series:    "links",
+      chunk_seq: 1_u64,
+      items:     [[42_u64, 20260505_u64, 10_u64]],
+    }.to_json, cluster)
+    response = Karma::Commands.call({
+      v:         2,
+      op:        "ingest.chunk",
+      stream_id: "stream-series",
+      series:    "other",
+      chunk_seq: 2_u64,
+      items:     [[42_u64, 20260505_u64, 10_u64]],
+    }.to_json, cluster)
+    parsed = parse_response(response)
+
+    parsed["success"].as_bool.should be_false
+    parsed["error_code"].as_s.should eq("validation_error")
+    cluster.trees.has_key?("other").should be_false
+  end
+
   it "rejects out-of-order v2 streaming ingest chunks before applying them" do
     cluster = Karma::Cluster.new
 
@@ -523,8 +594,8 @@ describe Karma::Commands do
     response = Karma::Commands.call({
       v:         2,
       op:        "ingest.begin",
-      mode:      "replace_series",
-      stream_id: "stream-replace",
+      mode:      "unknown",
+      stream_id: "stream-unknown",
     }.to_json, cluster)
     parsed = parse_response(response)
 

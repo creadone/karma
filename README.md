@@ -211,6 +211,7 @@ Tokens are not written to WAL.
   still use the word tree.
 * A key is an unsigned 64-bit integer inside a series.
 * A bucket is a day in `YYYYMMDD` format, for example `20260504`.
+* Default buckets use UTC days.
 * Counter values are unsigned 64-bit integers and never go below zero.
 * `counter.increment` and `counter.decrement` use today's bucket when `bucket`
   is omitted.
@@ -268,7 +269,8 @@ List series names.
 
 ### counter.increment
 
-Increment a key for a bucket. If `bucket` is omitted, Karma uses today's day.
+Increment a key for a bucket. If `bucket` is omitted, Karma uses today's UTC
+day.
 
 ```json
 {"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":1}
@@ -430,14 +432,28 @@ Reset one key or a whole series:
 
 ### ingest
 
-Streaming ingest loads large batches as ordered chunks. The first production
-mode is `add`; duplicate chunks are skipped and out-of-order chunks are
-rejected before they are applied.
+Streaming ingest loads large batches as ordered chunks. Supported modes are:
+
+* `add`: add item values to the live series;
+* `set`: set item bucket values in the live series;
+* `replace_series`: build a staged series and atomically replace the live
+  series on `ingest.commit`.
+
+Duplicate chunks are skipped and out-of-order chunks are rejected before they
+are applied. One stream is bound to the series used by its first chunk.
 
 ```json
 {"v":2,"op":"ingest.begin","stream_id":"import-20260505","mode":"add","granularity":"day"}
 {"v":2,"op":"ingest.chunk","stream_id":"import-20260505","series":"links","chunk_seq":1,"items":[[42,20260505,10]]}
 {"v":2,"op":"ingest.commit","stream_id":"import-20260505"}
+```
+
+`replace_series` keeps current reads pointed at the old series until commit:
+
+```json
+{"v":2,"op":"ingest.begin","stream_id":"rebuild-links","mode":"replace_series","granularity":"day"}
+{"v":2,"op":"ingest.chunk","stream_id":"rebuild-links","series":"links","chunk_seq":1,"items":[[42,20260505,10]]}
+{"v":2,"op":"ingest.commit","stream_id":"rebuild-links"}
 ```
 
 Abort an active stream:

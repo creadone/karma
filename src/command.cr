@@ -281,7 +281,7 @@ module Karma
         require_stream_id(directive)
         require_tree_name(directive)
         require_chunk_seq(directive)
-        require_items(directive)
+        require_ingest_items(directive)
       when "ingest_commit", "ingest_abort"
         require_stream_id(directive)
         Karma::Ingest.validate_stream_exists!(directive.stream_id.not_nil!)
@@ -498,14 +498,14 @@ module Karma
       raise Karma::Error.new("validation_error", "Field limit exceeds max size") if limit > max
     end
 
-    private def self.require_items(directive : Directive) : Nil
+    private def self.require_items(directive : Directive, allow_zero = false) : Nil
       items = directive.items
       raise Karma::Error.new("validation_error", "Field items is required") if items.nil?
       raise Karma::Error.new("validation_error", "Field items exceeds max size") if items.size > 10_000
 
       items.each do |item|
         raise Karma::Error.new("validation_error", "Each item must be [key, bucket, value]") unless item.size == 3
-        raise Karma::Error.new("validation_error", "Batch item value must be greater than 0") if item[2] == 0_u64
+        raise Karma::Error.new("validation_error", "Batch item value must be greater than 0") if !allow_zero && item[2] == 0_u64
       end
     end
 
@@ -520,7 +520,10 @@ module Karma
         raise Karma::Error.new("validation_error", "Field mode is required")
       end
 
-      raise Karma::Error.new("validation_error", "Only ingest mode add is currently supported") unless directive.mode == "add"
+      mode = directive.mode.not_nil!
+      unless Karma::Ingest::SUPPORTED_MODES.includes?(mode)
+        raise Karma::Error.new("validation_error", "Unsupported ingest mode #{mode}")
+      end
     end
 
     private def self.require_chunk_seq(directive : Directive) : Nil
@@ -529,11 +532,17 @@ module Karma
       end
 
       begin
-        Karma::Ingest.validate_chunk!(directive.stream_id.not_nil!, directive.chunk_seq.not_nil!)
+        stream = Karma::Ingest.validate_chunk!(directive.stream_id.not_nil!, directive.chunk_seq.not_nil!)
+        Karma::Ingest.bind_series!(stream, directive.tree_name.not_nil!) if directive.tree_name
       rescue e : Karma::Error
         Karma::Ingest.record_rejected_chunk
         raise e
       end
+    end
+
+    private def self.require_ingest_items(directive : Directive) : Nil
+      stream = Karma::Ingest.validate_stream_exists!(directive.stream_id.not_nil!)
+      require_items(directive, allow_zero: stream.mode != "add")
     end
 
     private def self.require_positive_value(directive : Directive) : Nil

@@ -19,6 +19,10 @@ describe Karma::TimeSeries do
     key.value.should eq(42_u64)
   end
 
+  it "uses UTC for today's default bucket" do
+    Karma::TimeSeries::Bucket.today.value.should eq(Time.utc.to_s("%Y%m%d").to_u64)
+  end
+
   it "wraps bucket ranges" do
     range = Karma::TimeSeries::BucketRange.new(
       Karma::TimeSeries::Bucket.new(20230201_u64),

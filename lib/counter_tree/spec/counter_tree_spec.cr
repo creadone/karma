@@ -24,6 +24,17 @@ describe CounterTree do
     tree.sum(1234_u64, 20230201_u64, 20230201_u64).should eq(3_u64)
   end
 
+  it "sets an explicit key/date to an absolute value" do
+    tree.reset
+    tree.increment(1234_u64, 20230201_u64, 5_u64)
+    tree.set(1234_u64, 20230201_u64, 2_u64).should eq(2_u64)
+    tree.sum(1234_u64).should eq(2_u64)
+    tree.set(1234_u64, 20230201_u64, 0_u64).should eq(0_u64)
+    tree.sum(1234_u64).should eq(0_u64)
+    tree.compact!
+    tree.get(1234_u64).should be_nil
+  end
+
   it "should reset global" do
     tree.increment(1234)
     tree.reset

@@ -27,6 +27,10 @@ module CounterTree
       get_or_create(key).decrement(date, value)
     end
 
+    def set(key : UInt64, date : UInt64, value : UInt64) : UInt64
+      get_or_create(key).set(date, value)
+    end
+
     def sum(key : UInt64) : UInt64
       get(key).try(&.sum) || 0_u64
     end

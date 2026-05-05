@@ -22,7 +22,7 @@ module Karma
       end
 
       def self.today : Bucket
-        new(Time.local.to_s("%Y%m%d").to_u64)
+        new(Time.utc.to_s("%Y%m%d").to_u64)
       end
     end
 

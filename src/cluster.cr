@@ -190,6 +190,11 @@ module Karma
       true
     end
 
+    def replace(name : String, tree : CounterTree::Tree) : Bool
+      @trees[name] = tree
+      true
+    end
+
     def delete_before(name : String, date : UInt64) : Bool
       get(name).delete_before(date)
     end

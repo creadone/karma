@@ -26,6 +26,26 @@ module CounterTree
       remove(date, value)
     end
 
+    def set(key : UInt64, value : UInt64) : UInt64
+      current_value = @table[key]? || 0_u64
+
+      if value == 0_u64
+        @table.delete(key)
+        decrement_total(current_value)
+      elsif current_value == 0_u64
+        @table[key] = value
+        increment_total(value)
+      elsif value > current_value
+        @table[key] = value
+        increment_total(value - current_value)
+      elsif value < current_value
+        @table[key] = value
+        decrement_total(current_value - value)
+      end
+
+      value
+    end
+
     def insert(key : UInt64, value : UInt64) : UInt64
       return value if value == 0_u64
 
@@ -145,7 +165,7 @@ module CounterTree
     end
 
     private def timestamp : UInt64
-      Time.local.to_s("%Y%m%d").to_u64
+      Time.utc.to_s("%Y%m%d").to_u64
     end
 
     private def checked_add(left : UInt64, right : UInt64) : UInt64

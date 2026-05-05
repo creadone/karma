@@ -5,11 +5,14 @@ timestamps = [20230201, 20230202, 20230203, 20230204, 20230205]
 
 describe CounterTree do
   it "should return 1" do
+    counter.reset
     result = counter.increment
     result.should eq(1_u64)
+    counter.table.has_key?(Time.utc.to_s("%Y%m%d").to_u64).should be_true
   end
 
   it "should return 0" do
+    counter.reset
     result = counter.decrement
     result.should eq(1_u64)
   end
@@ -32,6 +35,18 @@ describe CounterTree do
     counter.decrement(20230201_u64, 2_u64).should eq(2_u64)
     counter.table[20230201_u64].should eq(3_u64)
     counter.sum.should eq(3_u64)
+  end
+
+  it "sets an explicit date to an absolute value" do
+    counter.reset
+    counter.increment(20230201_u64, 5_u64)
+    counter.set(20230201_u64, 3_u64).should eq(3_u64)
+    counter.table[20230201_u64].should eq(3_u64)
+    counter.sum.should eq(3_u64)
+
+    counter.set(20230201_u64, 0_u64).should eq(0_u64)
+    counter.table.has_key?(20230201_u64).should be_false
+    counter.sum.should eq(0_u64)
   end
 
   it "removes zero buckets after decrement" do

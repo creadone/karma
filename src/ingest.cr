@@ -5,11 +5,15 @@ module Karma
       getter mode : String
       getter granularity : String?
       property last_chunk_seq : UInt64
+      property series_name : String?
+      property staged_tree : CounterTree::Tree?
 
       def initialize(@stream_id : String, @mode : String, @granularity : String?)
         @last_chunk_seq = 0_u64
       end
     end
+
+    SUPPORTED_MODES = %w[add set replace_series]
 
     @@streams = Hash(String, Stream).new
     @@metrics_mutex = Mutex.new
@@ -21,11 +25,13 @@ module Karma
     @@last_latency_ms = 0.0
 
     def self.begin_stream(stream_id : String, mode : String, granularity : String?)
-      unless mode == "add"
-        raise Karma::Error.new("validation_error", "Only ingest mode add is currently supported")
+      unless SUPPORTED_MODES.includes?(mode)
+        raise Karma::Error.new("validation_error", "Unsupported ingest mode #{mode}")
       end
 
       if stream = @@streams[stream_id]?
+        raise Karma::Error.new("validation_error", "Ingest stream already exists with mode #{stream.mode}") unless stream.mode == mode
+
         return stream_status(stream)
       end
 
@@ -70,6 +76,18 @@ module Karma
       {stream_id: stream.stream_id, chunk_seq: chunk_seq, last_chunk_seq: stream.last_chunk_seq}
     end
 
+    def self.bind_series!(stream : Stream, series_name : String) : Stream
+      if existing = stream.series_name
+        unless existing == series_name
+          raise Karma::Error.new("validation_error", "Ingest stream is already bound to series #{existing}")
+        end
+      else
+        stream.series_name = series_name
+      end
+
+      stream
+    end
+
     def self.record_chunk(applied : Bool, skipped : Bool, item_count : Int32, latency_ms : Float64) : Nil
       @@metrics_mutex.synchronize do
         if skipped
@@ -95,19 +113,24 @@ module Karma
     def self.metrics
       @@metrics_mutex.synchronize do
         {
-          active_streams:      @@streams.size,
-          chunks_applied:      @@chunks_applied,
-          chunks_skipped:      @@chunks_skipped,
-          chunks_rejected:     @@chunks_rejected,
-          items_applied:       @@items_applied,
-          latency_ms_last:     @@last_latency_ms,
-          latency_ms_average:  @@chunks_applied + @@chunks_skipped + @@chunks_rejected == 0 ? 0.0 : @@total_latency_ms / (@@chunks_applied + @@chunks_skipped + @@chunks_rejected),
+          active_streams:     @@streams.size,
+          chunks_applied:     @@chunks_applied,
+          chunks_skipped:     @@chunks_skipped,
+          chunks_rejected:    @@chunks_rejected,
+          items_applied:      @@items_applied,
+          latency_ms_last:    @@last_latency_ms,
+          latency_ms_average: @@chunks_applied + @@chunks_skipped + @@chunks_rejected == 0 ? 0.0 : @@total_latency_ms / (@@chunks_applied + @@chunks_skipped + @@chunks_rejected),
         }
       end
     end
 
-    def self.commit(stream_id : String)
+    def self.commit(stream_id : String, cluster)
       stream = stream!(stream_id)
+      if stream.mode == "replace_series"
+        series_name = stream.series_name || raise Karma::Error.new("validation_error", "Cannot commit empty replace_series stream")
+        staged_tree = stream.staged_tree || CounterTree::Tree.new
+        cluster.replace(series_name, staged_tree)
+      end
       @@streams.delete(stream_id)
       {stream_id: stream.stream_id, status: "committed", last_chunk_seq: stream.last_chunk_seq}
     end
@@ -138,6 +161,7 @@ module Karma
       {
         stream_id:      stream.stream_id,
         mode:           stream.mode,
+        series:         stream.series_name,
         granularity:    stream.granularity,
         status:         "active",
         last_chunk_seq: stream.last_chunk_seq,

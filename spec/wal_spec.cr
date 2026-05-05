@@ -187,6 +187,29 @@ describe Karma::Wal do
     restored.get("articles").sum(42_u64).should eq(10_u64)
   end
 
+  it "replays replace_series ingest with atomic commit" do
+    dump_dir = File.expand_path(".spec_wal_ingest_replace_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "articles", key: 1_u64, bucket: 20260505_u64, value: 99_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "ingest.begin", mode: "replace_series", stream_id: "replace-stream"}.to_json, cluster)
+    Karma::Commands.call({
+      v:         2,
+      op:        "ingest.chunk",
+      stream_id: "replace-stream",
+      series:    "articles",
+      chunk_seq: 1_u64,
+      items:     [[2_u64, 20260505_u64, 5_u64]],
+    }.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "ingest.commit", stream_id: "replace-stream"}.to_json, cluster)
+
+    Karma::Ingest.reset!
+    restored = Karma::Cluster.restore_with_wal(dump_dir)
+    restored.get("articles").sum(1_u64).should eq(0_u64)
+    restored.get("articles").sum(2_u64).should eq(5_u64)
+  end
+
   it "replays retention and compact commands" do
     dump_dir = File.expand_path(".spec_wal_retention_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }
