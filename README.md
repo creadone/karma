@@ -575,6 +575,26 @@ Local results depend on CPU, disk, filesystem, container runtime, network, and
 workload mix. The scripts below are intended as repeatable local checks, not as
 universal benchmarks.
 
+Last recorded local results from 2026-05-05:
+
+| Test | Mode | Throughput | p95 latency |
+| --- | --- | ---: | ---: |
+| `single_increment` | in-process, WAL off | 289,908 ops/sec | 0.004 ms |
+| `single_sum` | in-process, WAL off | 403,080 ops/sec | 0.0026 ms |
+| `series.batch_add` | in-process, WAL off | 1,917,010 items/sec | 0.9878 ms |
+| `counter.batch_sum` | in-process, WAL off | 2,389,520 key reads/sec | 0.8685 ms |
+| `tcp_single_increment` | TCP, 4 clients, WAL on, fsync on | 12,818 ops/sec | 0.5561 ms |
+| `tcp_single_sum` | TCP, 4 clients, WAL on, fsync on | 41,340 ops/sec | 0.1339 ms |
+| `tcp_series.batch_add` | TCP, 4 clients, WAL on, fsync on | 744,551 items/sec | 2.9103 ms |
+| `tcp_counter.batch_sum` | TCP, 4 clients, WAL on, fsync on | 1,708,312 key reads/sec | 1.5604 ms |
+
+Replication load test on the same date used `clients=4`, `keys=10000`,
+`batch_size=1000`, `write_batches=100`, `read_rounds=100`,
+`replication_poll_interval_ms=10`, and `replication_batch_size=1000`.
+The slave bootstrapped from snapshot, replayed WAL from LSN 10 to LSN 110,
+ended with `final_lag_entries=0`, and matched the master total:
+`master_total=110000`, `slave_total=110000`.
+
 In-process command-layer test:
 
 ```sh

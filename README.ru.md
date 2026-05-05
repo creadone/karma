@@ -584,6 +584,26 @@ socket.close
 среды, сети и профиля нагрузки. Эти скрипты нужны как повторяемые локальные
 проверки, а не как универсальный бенчмарк.
 
+Последние зафиксированные локальные результаты от 5 мая 2026:
+
+| Тест | Режим | Производительность | p95 latency |
+| --- | --- | ---: | ---: |
+| `single_increment` | внутри процесса, WAL выключен | 289 908 ops/sec | 0.004 ms |
+| `single_sum` | внутри процесса, WAL выключен | 403 080 ops/sec | 0.0026 ms |
+| `series.batch_add` | внутри процесса, WAL выключен | 1 917 010 items/sec | 0.9878 ms |
+| `counter.batch_sum` | внутри процесса, WAL выключен | 2 389 520 key reads/sec | 0.8685 ms |
+| `tcp_single_increment` | TCP, 4 клиента, WAL включен, fsync включен | 12 818 ops/sec | 0.5561 ms |
+| `tcp_single_sum` | TCP, 4 клиента, WAL включен, fsync включен | 41 340 ops/sec | 0.1339 ms |
+| `tcp_series.batch_add` | TCP, 4 клиента, WAL включен, fsync включен | 744 551 items/sec | 2.9103 ms |
+| `tcp_counter.batch_sum` | TCP, 4 клиента, WAL включен, fsync включен | 1 708 312 key reads/sec | 1.5604 ms |
+
+Тест репликации в тот же день запускался с `clients=4`, `keys=10000`,
+`batch_size=1000`, `write_batches=100`, `read_rounds=100`,
+`replication_poll_interval_ms=10` и `replication_batch_size=1000`.
+Slave поднялся из снимка состояния, проиграл WAL с LSN 10 до LSN 110,
+завершил прогон с `final_lag_entries=0`, а итоговые суммы совпали:
+`master_total=110000`, `slave_total=110000`.
+
 Тест слоя команд внутри процесса:
 
 ```sh
