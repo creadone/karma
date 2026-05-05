@@ -4,6 +4,8 @@ module Karma
     getter server : Server
 
     def self.build : Runtime
+      Karma.config.validate!
+
       cluster = if Karma.config.restore
                   Cluster.restore_with_wal(Karma.config.dump_dir)
                 else

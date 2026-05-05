@@ -35,11 +35,20 @@ module Karma
 
     def stop! : Nil
       @stopping = true
-      close_listener
-      return if drain_clients(Karma.config.shutdown_timeout_seconds.seconds)
+      initial_clients = active_client_count
+      Karma::Log.info("server.stop_begin", "active_clients=#{initial_clients}")
 
+      close_listener
+      if drain_clients(Karma.config.shutdown_timeout_seconds.seconds)
+        Karma::Log.info("server.drain_complete", "active_clients=0")
+        return
+      end
+
+      forced_clients = active_client_count
+      Karma::Log.info("server.drain_timeout", "active_clients=#{forced_clients}")
       close_active_clients
       drain_clients(1.second)
+      Karma::Log.info("server.force_close", "closed_clients=#{forced_clients} remaining_clients=#{active_client_count}")
     end
 
     private def close_listener : Nil
