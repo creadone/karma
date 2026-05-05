@@ -3,34 +3,50 @@
   <h3 align="center">Karma</h3>
 </p>
 
-Karma is a small TCP database for hot time-series counters with one-day
-granularity. It stores named series, historically called trees. Each series
-contains many numeric keys, and each key stores daily bucket values plus a
-total.
+Karma is a small TCP database for hot time-series counters. It is designed for
+cases where an application needs fresh pre-aggregated counters without hitting a
+heavier analytical store on every request.
 
-Karma is useful when a service needs fast counters for limits, usage tracking,
-or short-link click statistics:
+Typical use case:
 
-* increment or decrement a counter for the current day;
-* read a key total;
-* read a key total for a date range;
-* read daily values for a date range;
-* snapshot data to disk and restore it with WAL replay.
+```text
+application reads link metadata
+  -> application asks Karma for counters for many link ids
+  -> client receives links with fresh click counters
+```
+
+Karma keeps data in memory, persists it with snapshots and WAL, and exposes a
+newline-delimited JSON protocol over TCP.
+
+Russian version: [README.ru.md](README.ru.md).
 
 ## Status
 
-Karma is designed as a single-node service. Data is kept in memory, persisted
-with atomic `.tree` snapshots, and protected between snapshots by an append-only
-write-ahead log (`karma.wal`). The current concurrency model serializes command
-execution through one process-local state lock.
+Karma is currently best understood as a production-oriented hot counter read
+model, not as a general-purpose TSDB.
 
-Replication is being introduced incrementally. `--role=slave` already makes the
-node reject direct mutating client commands while still allowing internal WAL
-replay.
+Supported today:
 
-For critical production use, run it with a persistent volume, WAL enabled,
-`--wal-fsync=true`, health checks, and regular `dump_all` or `SIGUSR1`
-snapshots.
+* day-bucketed counters with `YYYYMMDD` buckets;
+* single-key writes and reads;
+* batch reads and batch writes;
+* streaming ingest for rebuild/backfill flows;
+* atomic snapshots and WAL replay;
+* recovery checkpoints and reconciliation reporting;
+* async master -> slave replication through snapshot bootstrap and WAL polling;
+* Prometheus-style operational metrics.
+
+Important boundaries:
+
+* command execution is serialized by one process-local state lock;
+* replication is asynchronous and manual-failover only;
+* there is no automatic leader election, quorum, or master-master mode;
+* object-storage snapshot transport and `replication.subscribe` are not part of
+  the current implementation.
+
+For production use, run with a persistent volume, WAL enabled,
+`--wal-fsync=true`, health checks, metrics scraping, and regular
+`snapshot.create_all` or `SIGUSR1` snapshots.
 
 ## Build
 
@@ -76,16 +92,19 @@ docker run --rm \
 
 ## Run
 
-Basic production-oriented run:
+Recommended master node:
 
 ```sh
 bin/karma \
   --bind=0.0.0.0 \
   --port=8080 \
   --directory=/var/lib/karma \
+  --role=master \
   --restore=true \
   --wal=true \
-  --wal-fsync=true
+  --wal-fsync=true \
+  --auth-token=write-secret \
+  --read-auth-token=read-secret
 ```
 
 The same configuration can be provided through environment variables. Command
@@ -101,180 +120,56 @@ KARMA_WAL_FSYNC=true \
 bin/karma
 ```
 
-Options:
+## Configuration
 
-```text
--b host, --bind=host
-  Host to bind. Default: 0.0.0.0
+Boolean values use `true` or `false`. Timeout values use seconds unless the
+option name ends with `-ms`.
 
--p port, --port=port
-  Port to listen on. Default: 8080
-
--d path, --directory=path
-  Directory for snapshots and WAL. Default: .
-
---role=role
-  Replication role: master or slave. Default: master
-
--r flag, --restore=flag
-  Load snapshots and replay WAL on startup. Default: true
-
--n flag, --nodelay=flag
-  Enable TCP_NODELAY on the server socket. Default: true
-
--w flag, --wal=flag
-  Enable write-ahead log for mutating commands. Default: true
-
---wal-fsync=flag
-  Fsync every WAL append and WAL truncate. Default: true
-
---max-request-bytes=bytes
-  Maximum JSON request line size. Default: 4096
-
---max-response-bytes=bytes
-  Maximum JSON response size. Use 0 to disable the limit. Default: 1048576
-
---read-timeout=seconds
-  Client socket read timeout. Default: 5
-
---write-timeout=seconds
-  Client socket write timeout. Default: 5
-
---query-timeout-ms=ms
-  Tree-level read timeout in milliseconds. Use 0 to disable the limit.
-  Default: 1000
-
---shutdown-timeout=seconds
-  Seconds to wait for active clients on shutdown before closing remaining
-  sockets. Default: 5
-
---auth-token=token
-  Require every client command to include the same token field.
-
---read-auth-token=token
-  Allow the token field to authorize read-only commands only.
-
---dump-retention-per-tree=count
-  Number of snapshots to keep per tree after dump_all. Default: 5
-
---replication-source-host=host
-  Master host for slave WAL polling. Set only on slave nodes.
-
---replication-source-port=port
-  Master port for slave WAL polling. Default: 8080
-
---replication-token=token
-  Token used by slave polling requests. Usually this should match the master's
-  read-only token.
-
---replication-poll-interval-ms=ms
-  Slave polling interval. Default: 1000
-
---replication-batch-size=count
-  Maximum WAL entries fetched by one slave poll. Default: 1000, max: 10000
-
---log=flag
-  Emit structured JSON logs to stdout/stderr. Default: true
-```
-
-Boolean flags use `true` or `false`.
-Numeric timeout values use `0` to disable the corresponding timeout. The
-request byte limit must be greater than `0`; the response byte limit may be `0`
-to disable the response limit.
-
-Environment variables:
-
-```text
-KARMA_HOST
-  Same as --bind.
-
-KARMA_PORT
-  Same as --port.
-
-KARMA_DUMP_DIR
-  Same as --directory.
-
-KARMA_ROLE
-  Same as --role.
-
-KARMA_RESTORE
-  Same as --restore.
-
-KARMA_TCP_NODELAY
-  Same as --nodelay.
-
-KARMA_WAL
-  Same as --wal.
-
-KARMA_WAL_FSYNC
-  Same as --wal-fsync.
-
-KARMA_MAX_REQUEST_BYTES
-  Same as --max-request-bytes.
-
-KARMA_MAX_RESPONSE_BYTES
-  Same as --max-response-bytes.
-
-KARMA_READ_TIMEOUT_SECONDS
-  Same as --read-timeout.
-
-KARMA_WRITE_TIMEOUT_SECONDS
-  Same as --write-timeout.
-
-KARMA_QUERY_TIMEOUT_MS
-  Same as --query-timeout-ms.
-
-KARMA_SHUTDOWN_TIMEOUT_SECONDS
-  Same as --shutdown-timeout.
-
-KARMA_AUTH_TOKEN
-  Same as --auth-token. Empty value disables the token.
-
-KARMA_READ_AUTH_TOKEN
-  Same as --read-auth-token. Empty value disables the token.
-
-KARMA_DUMP_RETENTION_PER_TREE
-  Same as --dump-retention-per-tree.
-
-KARMA_REPLICATION_SOURCE_HOST
-  Same as --replication-source-host.
-
-KARMA_REPLICATION_SOURCE_PORT
-  Same as --replication-source-port.
-
-KARMA_REPLICATION_TOKEN
-  Same as --replication-token.
-
-KARMA_REPLICATION_POLL_INTERVAL_MS
-  Same as --replication-poll-interval-ms.
-
-KARMA_REPLICATION_BATCH_SIZE
-  Same as --replication-batch-size.
-
-KARMA_LOG
-  Same as --log.
-```
-
-Boolean environment variables also use `true` or `false`.
+| CLI option | Env var | Default | Description |
+| --- | --- | ---: | --- |
+| `--bind=host` | `KARMA_HOST` | `0.0.0.0` | Host to bind. |
+| `--port=port` | `KARMA_PORT` | `8080` | TCP port. |
+| `--directory=path` | `KARMA_DUMP_DIR` | `.` | Directory for snapshots, WAL, and metadata. |
+| `--role=master\|slave` | `KARMA_ROLE` | `master` | Node role. |
+| `--restore=true\|false` | `KARMA_RESTORE` | `true` | Restore snapshots and replay WAL on startup. |
+| `--nodelay=true\|false` | `KARMA_TCP_NODELAY` | `true` | Enable TCP_NODELAY. |
+| `--wal=true\|false` | `KARMA_WAL` | `true` | Persist mutating commands to WAL. |
+| `--wal-fsync=true\|false` | `KARMA_WAL_FSYNC` | `true` | Fsync every WAL append/truncate. |
+| `--max-request-bytes=bytes` | `KARMA_MAX_REQUEST_BYTES` | `4096` | Maximum JSON request line size. Must be greater than 0. |
+| `--max-response-bytes=bytes` | `KARMA_MAX_RESPONSE_BYTES` | `1048576` | Maximum JSON response size. Use 0 to disable. |
+| `--read-timeout=seconds` | `KARMA_READ_TIMEOUT_SECONDS` | `5` | Client socket read timeout. Use 0 to disable. |
+| `--write-timeout=seconds` | `KARMA_WRITE_TIMEOUT_SECONDS` | `5` | Client socket write timeout. Use 0 to disable. |
+| `--query-timeout-ms=ms` | `KARMA_QUERY_TIMEOUT_MS` | `1000` | Timeout for expensive tree-level reads. Use 0 to disable. |
+| `--shutdown-timeout=seconds` | `KARMA_SHUTDOWN_TIMEOUT_SECONDS` | `5` | Graceful shutdown drain timeout. |
+| `--auth-token=token` | `KARMA_AUTH_TOKEN` | unset | Token required for all commands. Empty env value disables it. |
+| `--read-auth-token=token` | `KARMA_READ_AUTH_TOKEN` | unset | Token allowed only for read-only commands. Empty env value disables it. |
+| `--dump-retention-per-tree=count` | `KARMA_DUMP_RETENTION_PER_TREE` | `5` | Snapshots to keep per series after `snapshot.create_all`. |
+| `--replication-source-host=host` | `KARMA_REPLICATION_SOURCE_HOST` | unset | Master host used by slave polling. |
+| `--replication-source-port=port` | `KARMA_REPLICATION_SOURCE_PORT` | `8080` | Master port used by slave polling. |
+| `--replication-token=token` | `KARMA_REPLICATION_TOKEN` | unset | Token used by slave replication requests. |
+| `--replication-poll-interval-ms=ms` | `KARMA_REPLICATION_POLL_INTERVAL_MS` | `1000` | Slave polling interval. |
+| `--replication-batch-size=count` | `KARMA_REPLICATION_BATCH_SIZE` | `1000` | Maximum WAL entries fetched by one slave poll. Max: 10000. |
+| `--log=true\|false` | `KARMA_LOG` | `true` | Emit structured JSON logs. |
 
 ## Protocol
 
-Karma speaks newline-delimited JSON over TCP. Each request is one JSON object
-followed by `\n`. Each response is one JSON object followed by `\r\n`.
+Karma speaks newline-delimited JSON over TCP:
 
-Protocol v2 is the preferred protocol for new clients. Requests use a stable
-`v: 2` envelope, namespaced `op` values, and time-series terminology:
+* one request is one JSON object followed by `\n`;
+* one response is one JSON object followed by `\r\n`.
+
+Protocol v2 is the preferred protocol for new clients. It uses `v: 2`,
+namespaced `op` values, and `series/key/bucket/value` terminology:
 
 ```json
 {"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":1}
 ```
 
-The older v1 protocol remains supported for compatibility and WAL replay. v1
-requests use `command`, `tree_name`, `date`, and `time_from`/`time_to`. v1 usage
-is counted in `stats.legacy_request_count` and
-`karma_protocol_v1_requests_total`.
+The legacy v1 protocol remains supported for compatibility and WAL replay.
+Legacy requests use `command`, `tree_name`, `date`, and `time_from`/`time_to`.
+New clients should use v2.
 
-Response schema:
+Response:
 
 ```json
 {
@@ -307,213 +202,108 @@ Stable error codes:
 * `request_too_large`
 * `response_too_large`
 * `query_timeout`
+* `replication_gap`
+* `replication_error`
 * `internal_error`
 
-If `--auth-token` is configured, include `token` in every client request:
-
-```json
-{"v":2,"op":"system.ping","token":"secret"}
-```
-
-If `--read-auth-token` is configured, that token can execute read-only
-commands such as `system.ping`, `tree.list`, `counter.sum`,
-`counter.batch_sum`, `counter.series`, `system.stats`, `system.metrics`,
-`tree.info`, `tree.keys`, `tree.summary`, `tree.top`, and `snapshot.info`.
-Mutating or admin commands return `forbidden` for a read-only token.
-
-Tokens are not written to WAL.
+If `--auth-token` is configured, include `token` in every client request. If
+`--read-auth-token` is configured, that token can execute read-only commands
+only. Tokens are not written to WAL.
 
 ## Data Model
 
-* A series is a named collection of counters. The storage layer and legacy API
-  still use the word tree.
-* A key is an unsigned 64-bit integer inside a series.
-* A bucket is a day in `YYYYMMDD` format, for example `20260504`.
-* Default buckets use UTC days.
-* Counter values are unsigned 64-bit integers and never go below zero.
-* `counter.increment` and `counter.decrement` use today's bucket when `bucket`
-  is omitted.
+* A **series** is a named collection of counters. The storage layer and legacy
+  API still use the word `tree`.
+* A **key** is an unsigned 64-bit integer inside a series.
+* A **bucket** is a UTC day in `YYYYMMDD` format, for example `20260505`.
+* A **value** is an unsigned 64-bit integer.
+* Increment/decrement commands use today's UTC bucket when `bucket` is omitted.
+* Counter values never go below zero.
 
 Read commands do not create missing series. Missing series return `not_found`.
-For existing series, reading a missing key returns empty or zero values.
+For an existing series, reading a missing key returns zero or an empty result.
 
-## v2 Commands
+## Command Examples
 
-### ping
+### Basic Counters
 
-Check that the server responds.
-
-Request:
-
-```json
-{"v":2,"op":"system.ping"}
-```
-
-Response:
-
-```json
-{"protocol_version":2,"success":true,"response":"pong","error_code":null}
-```
-
-### tree.create
-
-Create a series if it does not already exist.
+Create a series:
 
 ```json
 {"v":2,"op":"tree.create","series":"links"}
 ```
 
-Response:
+Increment today's counter:
 
 ```json
-{"protocol_version":2,"success":true,"response":"OK","error_code":null}
+{"v":2,"op":"counter.increment","series":"links","key":42,"value":1}
 ```
 
-### tree.drop
-
-Delete a series from memory.
-
-```json
-{"v":2,"op":"tree.drop","series":"links"}
-```
-
-### tree.list
-
-List series names.
-
-```json
-{"v":2,"op":"tree.list"}
-```
-
-### counter.increment
-
-Increment a key for a bucket. If `bucket` is omitted, Karma uses today's UTC
-day.
+Increment an explicit bucket:
 
 ```json
 {"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":1}
 ```
 
-Response `response` is the increment amount:
-
-```json
-{"protocol_version":2,"success":true,"response":1,"error_code":null}
-```
-
-### counter.decrement
-
-Decrement a key for a bucket. The counter never goes below zero.
+Decrement:
 
 ```json
 {"v":2,"op":"counter.decrement","series":"links","key":42,"bucket":20260505,"value":1}
 ```
 
-### counter.sum
-
-Read total for a key:
+Read a key total:
 
 ```json
 {"v":2,"op":"counter.sum","series":"links","key":42}
 ```
 
-Read total for a date range:
+Read a date range:
 
 ```json
-{
-  "v": 2,
-  "op": "counter.sum",
-  "series": "links",
-  "key": 42,
-  "range": {"from": 20260501, "to": 20260504}
-}
+{"v":2,"op":"counter.sum","series":"links","key":42,"range":{"from":20260501,"to":20260505}}
 ```
 
-### counter.batch_sum
+Read daily points:
 
-Read totals for many keys in one request:
+```json
+{"v":2,"op":"counter.series","series":"links","key":42,"range":{"from":20260501,"to":20260505}}
+```
+
+### Batch Reads and Writes
+
+Read many totals in one request:
 
 ```json
 {"v":2,"op":"counter.batch_sum","series":"links","keys":[41,42,43]}
 ```
 
-With a range:
+Read many totals for a range:
 
 ```json
-{
-  "v": 2,
-  "op": "counter.batch_sum",
-  "series": "links",
-  "keys": [41, 42, 43],
-  "range": {"from": 20260501, "to": 20260504}
-}
+{"v":2,"op":"counter.batch_sum","series":"links","keys":[41,42,43],"range":{"from":20260501,"to":20260505}}
 ```
 
-### counter.series
-
-Read daily values for one key:
+Add many `[key, bucket, value]` items:
 
 ```json
-{
-  "v": 2,
-  "op": "counter.series",
-  "series": "links",
-  "key": 42,
-  "range": {"from": 20260501, "to": 20260504}
-}
+{"v":2,"op":"series.batch_add","series":"links","items":[[42,20260505,10],[43,20260505,3]]}
 ```
 
-### series.batch_add
+Large batch requests must fit `--max-request-bytes`.
 
-Add many `[key, bucket, value]` items in one request:
+### Tree/Series Inspection
+
+List series:
 
 ```json
-{
-  "v": 2,
-  "op": "series.batch_add",
-  "series": "links",
-  "items": [[42, 20260505, 10], [43, 20260505, 3]]
-}
+{"v":2,"op":"tree.list"}
 ```
 
-Large batches must fit `--max-request-bytes`; increase it for backfill or
-streaming ingest clients.
-
-### tree.series
-
-Read daily values for all keys in a series:
+Inspect one series:
 
 ```json
-{
-  "v": 2,
-  "op": "tree.series",
-  "series": "links",
-  "range": {"from": 20260501, "to": 20260504}
-}
+{"v":2,"op":"tree.info","series":"links"}
 ```
-
-### tree.summary
-
-Return key count, bucket count, and total sum for a series:
-
-```json
-{"v":2,"op":"tree.summary","series":"links"}
-```
-
-With a range:
-
-```json
-{"v":2,"op":"tree.summary","series":"links","range":{"from":20260501,"to":20260504}}
-```
-
-### tree.top
-
-Return top keys by total value:
-
-```json
-{"v":2,"op":"tree.top","series":"links","limit":100}
-```
-
-### tree.keys
 
 Return keys with cursor pagination:
 
@@ -521,24 +311,36 @@ Return keys with cursor pagination:
 {"v":2,"op":"tree.keys","series":"links","limit":1000,"cursor":0}
 ```
 
-### delete and reset
-
-Delete date-range values for one key:
+Return top keys:
 
 ```json
-{"v":2,"op":"counter.delete_range","series":"links","key":42,"range":{"from":20260501,"to":20260504}}
+{"v":2,"op":"tree.top","series":"links","limit":100}
 ```
 
-Delete date-range values for all keys in a series:
+Return summary:
 
 ```json
-{"v":2,"op":"tree.delete_range","series":"links","range":{"from":20260501,"to":20260504}}
+{"v":2,"op":"tree.summary","series":"links","range":{"from":20260501,"to":20260505}}
 ```
+
+### Retention and Maintenance
 
 Delete old buckets:
 
 ```json
 {"v":2,"op":"series.delete_before","series":"links","before":20260401}
+```
+
+Compact a series:
+
+```json
+{"v":2,"op":"series.compact","series":"links"}
+```
+
+Compact all series:
+
+```json
+{"v":2,"op":"system.compact"}
 ```
 
 Reset one key or a whole series:
@@ -548,30 +350,29 @@ Reset one key or a whole series:
 {"v":2,"op":"tree.reset","series":"links"}
 ```
 
-### ingest
+Delete a date range:
 
-Streaming ingest loads large batches as ordered chunks. Supported modes are:
+```json
+{"v":2,"op":"counter.delete_range","series":"links","key":42,"range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"tree.delete_range","series":"links","range":{"from":20260501,"to":20260505}}
+```
+
+### Streaming Ingest
+
+Streaming ingest is useful for rebuilds, backfills, and large imports. Supported
+modes:
 
 * `add`: add item values to the live series;
 * `set`: set item bucket values in the live series;
 * `replace_series`: build a staged series and atomically replace the live
-  series on `ingest.commit`.
+  series on commit.
 
-Duplicate chunks are skipped and out-of-order chunks are rejected before they
-are applied. One stream is bound to the series used by its first chunk.
+Example:
 
 ```json
 {"v":2,"op":"ingest.begin","stream_id":"import-20260505","mode":"add","granularity":"day"}
 {"v":2,"op":"ingest.chunk","stream_id":"import-20260505","series":"links","chunk_seq":1,"items":[[42,20260505,10]]}
 {"v":2,"op":"ingest.commit","stream_id":"import-20260505"}
-```
-
-`replace_series` keeps current reads pointed at the old series until commit:
-
-```json
-{"v":2,"op":"ingest.begin","stream_id":"rebuild-links","mode":"replace_series","granularity":"day"}
-{"v":2,"op":"ingest.chunk","stream_id":"rebuild-links","series":"links","chunk_seq":1,"items":[[42,20260505,10]]}
-{"v":2,"op":"ingest.commit","stream_id":"rebuild-links"}
 ```
 
 Abort an active stream:
@@ -580,39 +381,70 @@ Abort an active stream:
 {"v":2,"op":"ingest.abort","stream_id":"import-20260505"}
 ```
 
-### snapshots
+Duplicate chunks are skipped. Out-of-order chunks are rejected before they are
+applied. A stream is bound to the series used by its first chunk.
 
-Create, list, load, verify, and inspect snapshots:
+## Snapshots, WAL, and Recovery
+
+Karma uses two persistence mechanisms:
+
+* snapshots: MessagePack `.tree` files, one per series;
+* WAL: newline-delimited JSON entries in `karma.wal`.
+
+Create and inspect snapshots:
 
 ```json
 {"v":2,"op":"snapshot.create","series":"links"}
 {"v":2,"op":"snapshot.create_all"}
 {"v":2,"op":"snapshot.list"}
-{"v":2,"op":"snapshot.load","file":"1777925811_links.tree"}
-{"v":2,"op":"snapshot.fetch","file":"1777925811_links.tree"}
-{"v":2,"op":"snapshot.fetch_chunk","file":"1777925811_links.tree","offset":0,"limit":262144}
-{"v":2,"op":"snapshot.verify"}
 {"v":2,"op":"snapshot.info"}
 ```
 
-### system
-
-Runtime and operational commands:
+Load and fetch snapshots:
 
 ```json
-{"v":2,"op":"system.health"}
-{"v":2,"op":"system.stats"}
-{"v":2,"op":"system.metrics"}
-{"v":2,"op":"system.compact"}
+{"v":2,"op":"snapshot.load","file":"1777925811_links.tree"}
+{"v":2,"op":"snapshot.fetch","file":"1777925811_links.tree"}
+{"v":2,"op":"snapshot.fetch_chunk","file":"1777925811_links.tree","offset":0,"limit":262144}
 ```
 
-Report reconciliation results from external checks:
+Verify the restore path:
 
 ```json
-{"v":2,"op":"reconciliation.report","checked_points":1000,"mismatch_count":2,"absolute_drift":15,"max_abs_delta":10}
+{"v":2,"op":"snapshot.verify"}
 ```
 
-Record and inspect recovery checkpoints for external ingestion sources:
+`snapshot.verify` restores data into a temporary cluster and checks:
+
+* snapshot sidecar metadata;
+* latest snapshot `last_lsn` consistency;
+* WAL LSN continuity;
+* snapshot/WAL boundaries;
+* persisted `karma.wal.lsn`.
+
+New WAL lines use an LSN envelope:
+
+```json
+{"v":2,"lsn":1,"entry":{"v":2,"op":"counter.increment","tree":"links","key":42,"date":20260505,"value":1}}
+```
+
+Each new snapshot has a sidecar metadata file named
+`<snapshot>.meta.json`. It records `file`, `tree`, `timestamp`, `bytes`, and
+`last_lsn`.
+
+Startup with `--restore=true`:
+
+1. Load the latest snapshot per series.
+2. Replay WAL entries.
+3. On slave nodes, initialize `karma.replication.lsn` from snapshot metadata
+   before polling the master.
+
+`snapshot.create_all` writes atomic snapshots, fsyncs them, truncates WAL after
+successful snapshotting, and prunes old snapshots according to
+`--dump-retention-per-tree`.
+
+Recovery checkpoints can record external source positions such as ClickHouse
+export ids or durable queue offsets:
 
 ```json
 {"v":2,"op":"recovery.checkpoint","source":"clickhouse-links","offset":"export-2026-05-05","event_id":"batch-42"}
@@ -620,127 +452,91 @@ Record and inspect recovery checkpoints for external ingestion sources:
 {"v":2,"op":"recovery.status","source":"clickhouse-links"}
 ```
 
-Inspect replication bootstrap state:
+External reconciliation jobs can report drift back to Karma:
 
 ```json
-{"v":2,"op":"replication.status"}
-{"v":2,"op":"replication.entries","after_lsn":120,"limit":1000}
+{"v":2,"op":"reconciliation.report","checked_points":1000,"mismatch_count":2,"absolute_drift":15,"max_abs_delta":10}
 ```
 
-`replication.status` includes `replayed_lsn`, `replication_lag_entries`,
-`replication_entries_applied`, and `replication_last_received_unix`. Slaves use
-`karma.replication.lsn` to persist the last applied master WAL LSN.
-`replication.entries` is bounded by both `limit` and the master's
-`max_response_bytes`; when the byte budget cuts the page, the response includes
-`truncated_by_bytes: true` and `next_lsn` points to the last returned entry.
+## Replication
 
-Start a polling slave:
+Karma supports async master -> slave replication through snapshot bootstrap and
+WAL polling.
+
+Start a slave:
 
 ```sh
 bin/karma \
   --role=slave \
   --port=8081 \
   --directory=/var/lib/karma-slave \
+  --restore=true \
   --replication-source-host=127.0.0.1 \
   --replication-source-port=8080 \
   --replication-token=read-secret
 ```
 
-If the slave data directory has no local snapshots and `--restore=true`, a
-slave with `--replication-source-host` first calls `snapshot.info` and
-`snapshot.fetch_chunk` on the master, installs the latest snapshot for each
-tree, then sets `karma.replication.lsn` from snapshot metadata before polling
-WAL entries.
-`snapshot.fetch` returns base64-encoded snapshot bytes and is intended for small
-manual bootstrap checks. Automated slave bootstrap uses `snapshot.fetch_chunk`
-with bounded chunks. Very large snapshots may still be better served through a
-future object-storage transport.
+If the slave data directory has no local snapshots and `--restore=true`, the
+slave fetches the latest master snapshots through `snapshot.fetch_chunk`, sets
+`karma.replication.lsn` from snapshot metadata, and then polls
+`replication.entries`.
+
+Useful commands:
+
+```json
+{"v":2,"op":"replication.status"}
+{"v":2,"op":"replication.entries","after_lsn":120,"limit":1000}
+```
+
+`replication.entries` is bounded by both `limit` and the master's
+`max_response_bytes`. If the byte budget cuts the page, the response includes
+`truncated_by_bytes: true`, and `next_lsn` points to the last returned entry.
 
 Operational notes:
 
-* manual failover is supported only as an operator procedure; stop the old
-  master before promoting a slave, and rebuild the remaining slaves from the
-  promoted master;
-* rebuild a slave by starting it with an empty data directory, `--restore=true`,
-  and `--replication-source-host`;
-* alert on sustained `karma_replication_lag_entries`, growing
-  `karma_replication_poll_errors_total`, stale
-  `karma_replication_last_poll_success_unix`, and bootstrap errors.
+* slave nodes reject direct mutating client commands;
+* failover is manual;
+* stop the old master before promoting a slave;
+* rebuild remaining slaves from the promoted master;
+* watch `karma_replication_lag_entries`,
+  `karma_replication_poll_errors_total`, and
+  `karma_replication_last_poll_success_unix`.
 
-The detailed Russian runbook is in
-`docs/replication-operations-runbook.md`.
+Detailed runbook: [docs/replication-operations-runbook.md](docs/replication-operations-runbook.md).
 
-### Legacy v1
+## Metrics and Health
 
-Legacy clients can continue to use v1 `command` requests:
+Basic health:
 
 ```json
-{"command":"increment","tree_name":"links","key":42}
-{"command":"sum","tree_name":"links","key":42}
+{"v":2,"op":"system.ping"}
+{"v":2,"op":"system.health"}
 ```
 
-These requests return `protocol_version: 1`. New clients should use v2.
+Operational stats:
 
-## Metrics
+```json
+{"v":2,"op":"system.stats"}
+```
 
-Metrics include:
+Prometheus-style metrics:
 
-* `karma_uptime_seconds`
-* `karma_trees`
-* `karma_keys`
-* `karma_dumps`
-* `karma_role`
-* `karma_wal_bytes`
-* `karma_wal_current_lsn`
-* `karma_replication_replayed_lsn`
-* `karma_replication_lag_entries`
-* `karma_replication_entries_applied_total`
-* `karma_replication_last_received_unix`
-* `karma_replication_poll_attempts_total`
-* `karma_replication_poll_success_total`
-* `karma_replication_poll_errors_total`
-* `karma_replication_last_poll_attempt_unix`
-* `karma_replication_last_poll_success_unix`
-* `karma_replication_last_poll_error_unix`
-* `karma_replication_bootstrap_attempts_total`
-* `karma_replication_bootstrap_success_total`
-* `karma_replication_bootstrap_errors_total`
-* `karma_replication_last_bootstrap_attempt_unix`
-* `karma_replication_last_bootstrap_success_unix`
-* `karma_replication_last_bootstrap_error_unix`
-* `karma_memory_bytes`
-* `karma_commands_total`
-* `karma_errors_total`
-* `karma_protocol_v1_requests_total`
-* `karma_query_timeouts_total`
-* `karma_batch_reads_total`
-* `karma_batch_read_keys_total`
-* `karma_batch_writes_total`
-* `karma_batch_write_items_total`
-* `karma_retention_operations_total`
-* `karma_compactions_total`
-* `karma_reconciliation_runs_total`
-* `karma_reconciliation_checked_points_total`
-* `karma_reconciliation_mismatches_total`
-* `karma_reconciliation_absolute_drift_total`
-* `karma_reconciliation_last_run_unix`
-* `karma_reconciliation_last_checked_points`
-* `karma_reconciliation_last_mismatches`
-* `karma_reconciliation_last_absolute_drift`
-* `karma_reconciliation_last_max_abs_delta`
-* `karma_recovery_checkpoints`
-* `karma_recovery_last_checkpoint_unix`
-* `karma_command_latency_ms`
-* `karma_command_latency_ms_average`
-* `karma_ingest_active_streams`
-* `karma_ingest_chunks_applied_total`
-* `karma_ingest_chunks_skipped_total`
-* `karma_ingest_chunks_rejected_total`
-* `karma_ingest_items_applied_total`
-* `karma_ingest_chunk_latency_ms`
-* `karma_ingest_chunk_latency_ms_average`
+```json
+{"v":2,"op":"system.metrics"}
+```
 
-## Examples
+Metric groups include:
+
+* uptime, role, memory, trees, keys, snapshots;
+* WAL bytes and current LSN;
+* command counts, errors, latency, and protocol v1 usage;
+* batch read/write counters;
+* retention and compaction counters;
+* ingest stream counters and latency;
+* reconciliation and recovery counters;
+* replication lag, replayed LSN, polling/bootstrap success and error counters.
+
+## Client Examples
 
 Using `nc`:
 
@@ -773,91 +569,20 @@ puts socket.gets
 socket.close
 ```
 
-## Persistence
+## Performance Checks
 
-Karma uses two persistence mechanisms:
+Local results depend on CPU, disk, filesystem, container runtime, network, and
+workload mix. The scripts below are intended as repeatable local checks, not as
+universal benchmarks.
 
-* snapshots: MessagePack `.tree` files, one per tree;
-* WAL: newline-delimited JSON entries in `karma.wal`.
-
-New WAL lines use an LSN envelope:
-
-```json
-{"v":2,"lsn":1,"entry":{"v":2,"op":"counter.increment","tree":"links","key":42,"date":20260505,"value":1}}
-```
-
-The current WAL LSN is persisted in `karma.wal.lsn`. WAL replay accepts both
-the LSN envelope and older WAL lines where the command JSON is written directly
-at the top level.
-
-Each new snapshot also gets a sidecar metadata file named
-`<snapshot>.meta.json`. It records the snapshot file, tree, timestamp, size,
-and `last_lsn`, which is the WAL LSN covered by that snapshot. `snapshot.info`
-returns `last_snapshot_lsn` and per-tree `last_lsn` values.
-
-On master nodes, snapshot `last_lsn` is the current local WAL LSN. On slave
-nodes, it is the last replayed master LSN from `karma.replication.lsn`; this
-allows a restored slave snapshot to resume polling from the snapshot boundary
-instead of replaying from zero.
-
-Recovery checkpoint metadata is stored separately in `recovery.json` in the
-same directory. It records external source positions such as ClickHouse export
-ids or durable queue offsets. It is loaded on startup before serving commands.
-
-Startup with `--restore=true`:
-
-1. Load the latest snapshot per tree.
-2. Replay WAL entries.
-3. On slave nodes, bootstrap `karma.replication.lsn` from snapshot metadata
-   before polling the master.
-
-`snapshot.create_all` / legacy `dump_all`:
-
-1. Writes atomic snapshots through a temporary file and rename.
-2. Fsyncs snapshot files before rename.
-3. Truncates WAL after successful snapshotting.
-4. Prunes old snapshots per tree.
-
-`snapshot.verify` restores data into a temporary cluster and also checks
-snapshot sidecar metadata, WAL LSN continuity, WAL/snapshot boundaries, and the
-persisted `karma.wal.lsn` file.
-
-## Signals
-
-* `SIGINT`: stop accepting new TCP clients, dump all trees, truncate WAL after
-  successful snapshots, and exit with status 0.
-* `SIGUSR1`: dump all trees, truncate WAL after successful snapshots, and keep
-  running.
-
-## Performance
-
-Local test results on this development machine:
-
-* native binary, WAL enabled, `--wal-fsync=false`: about 25k writes/sec;
-* native binary, WAL enabled, `--wal-fsync=true`: about 19k writes/sec;
-* Docker with bind mount and `--wal-fsync=true`: about 5k writes/sec.
-
-Actual production throughput depends on CPU, disk, filesystem, container
-runtime, network, and workload mix.
-
-Run the in-process command-layer load test:
+In-process command-layer test:
 
 ```sh
 crystal build --release scripts/load_test.cr -o bin/karma_load_test
 bin/karma_load_test
 ```
 
-Smaller smoke run:
-
-```sh
-crystal run scripts/load_test.cr -- \
-  --keys=1000 \
-  --batch-size=100 \
-  --single-rounds=1000 \
-  --read-rounds=10
-```
-
-Run the TCP load test against a real loopback Karma server:
+TCP loopback test:
 
 ```sh
 crystal build --release scripts/tcp_load_test.cr -o bin/karma_tcp_load_test
@@ -867,9 +592,7 @@ bin/karma_tcp_load_test \
   --wal-fsync=false
 ```
 
-For the conservative WAL path, use `--wal-fsync=true`.
-
-Run the master/slave replication load test:
+Master/slave replication test:
 
 ```sh
 shards build --release
@@ -883,11 +606,7 @@ bin/karma_replication_load_test \
   --read-rounds=100
 ```
 
-The replication test starts a local master and slave, bootstraps the slave from
-master snapshots, writes to the master, reads from the slave, waits for WAL lag
-to reach zero, and verifies that master/slave totals match.
-
-Run CSV reconciliation against ClickHouse/exported aggregates:
+CSV reconciliation against exported aggregates:
 
 ```sh
 crystal run scripts/reconcile_csv.cr -- \
@@ -897,6 +616,13 @@ crystal run scripts/reconcile_csv.cr -- \
   --csv=clickhouse-links.csv \
   --report
 ```
+
+## Signals
+
+* `SIGINT`: stop accepting new TCP clients, dump all series, truncate WAL after
+  successful snapshots, and exit with status 0.
+* `SIGUSR1`: dump all series, truncate WAL after successful snapshots, and keep
+  running.
 
 ## Development
 
@@ -913,14 +639,8 @@ Build:
 shards build --release
 ```
 
-The `counter_tree` library is vendored in `lib/counter_tree` so counter storage
+The `counter_tree` library is vendored in `lib/counter_tree`, so counter storage
 changes can be developed and tested inside this repository.
-
-## Clients
-
-Karma's protocol is simple JSON over TCP. Existing higher-level clients may need
-updates to emit v2 request envelopes, handle protocol version `2` responses,
-send auth tokens, and use the newer operational commands.
 
 ## License
 
