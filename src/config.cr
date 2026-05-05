@@ -17,6 +17,11 @@ module Karma
     property query_timeout_ms : Int32 = 1_000
     property shutdown_timeout_seconds : Int32 = 5
     property dump_retention_per_tree : Int32 = 5
+    property replication_source_host : String?
+    property replication_source_port : Int32 = 8080
+    property replication_token : String?
+    property replication_poll_interval_ms : Int32 = 1_000
+    property replication_batch_size : Int32 = 1_000
     property auth_token : String?
     property read_auth_token : String?
     property log : Bool = true
@@ -37,6 +42,11 @@ module Karma
       @query_timeout_ms = int_env("KARMA_QUERY_TIMEOUT_MS", @query_timeout_ms)
       @shutdown_timeout_seconds = int_env("KARMA_SHUTDOWN_TIMEOUT_SECONDS", @shutdown_timeout_seconds)
       @dump_retention_per_tree = int_env("KARMA_DUMP_RETENTION_PER_TREE", @dump_retention_per_tree)
+      @replication_source_host = optional_string_env("KARMA_REPLICATION_SOURCE_HOST", @replication_source_host)
+      @replication_source_port = int_env("KARMA_REPLICATION_SOURCE_PORT", @replication_source_port)
+      @replication_token = optional_string_env("KARMA_REPLICATION_TOKEN", @replication_token)
+      @replication_poll_interval_ms = int_env("KARMA_REPLICATION_POLL_INTERVAL_MS", @replication_poll_interval_ms)
+      @replication_batch_size = int_env("KARMA_REPLICATION_BATCH_SIZE", @replication_batch_size)
       @auth_token = optional_string_env("KARMA_AUTH_TOKEN", @auth_token)
       @read_auth_token = optional_string_env("KARMA_READ_AUTH_TOKEN", @read_auth_token)
       @log = bool_env("KARMA_LOG", @log)
@@ -54,6 +64,17 @@ module Karma
       raise_validation("query_timeout_ms must be greater than or equal to 0") unless @query_timeout_ms >= 0
       raise_validation("shutdown_timeout_seconds must be greater than or equal to 0") unless @shutdown_timeout_seconds >= 0
       raise_validation("dump_retention_per_tree must be greater than or equal to 0") unless @dump_retention_per_tree >= 0
+      validate_replication!
+    end
+
+    private def validate_replication! : Nil
+      return unless source_host = @replication_source_host
+
+      raise_validation("replication_source_host must not be empty") if source_host.empty?
+      raise_validation("replication source requires slave role") unless @role == "slave"
+      raise_validation("replication_source_port must be between 1 and 65535") unless (1..65_535).includes?(@replication_source_port)
+      raise_validation("replication_poll_interval_ms must be greater than 0") unless @replication_poll_interval_ms > 0
+      raise_validation("replication_batch_size must be between 1 and 10000") unless (1..10_000).includes?(@replication_batch_size)
     end
 
     private def string_env(name : String, fallback : String) : String

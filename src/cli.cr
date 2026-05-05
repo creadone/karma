@@ -76,6 +76,26 @@ module Karma
           Karma.config.dump_retention_per_tree = int_flag(count, "--dump-retention-per-tree")
         end
 
+        parser.on("--replication-source-host=host", "Master host for slave WAL polling") do |host|
+          Karma.config.replication_source_host = host
+        end
+
+        parser.on("--replication-source-port=port", "Master port for slave WAL polling (default: #{Karma.config.replication_source_port})") do |port|
+          Karma.config.replication_source_port = int_flag(port, "--replication-source-port")
+        end
+
+        parser.on("--replication-token=token", "Token used by slave polling requests") do |token|
+          Karma.config.replication_token = token
+        end
+
+        parser.on("--replication-poll-interval-ms=ms", "Slave polling interval in milliseconds (default: #{Karma.config.replication_poll_interval_ms})") do |ms|
+          Karma.config.replication_poll_interval_ms = int_flag(ms, "--replication-poll-interval-ms")
+        end
+
+        parser.on("--replication-batch-size=count", "Maximum WAL entries per slave poll (default: #{Karma.config.replication_batch_size})") do |count|
+          Karma.config.replication_batch_size = int_flag(count, "--replication-batch-size")
+        end
+
         parser.on("--log=flag", "Enable structured JSON logs (default: #{Karma.config.log})") do |flag|
           Karma.config.log = bool_flag(flag, "--log")
         end

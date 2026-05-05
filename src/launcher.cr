@@ -6,6 +6,7 @@ module Karma
     def run!
       runtime = @runtime ||= Runtime.build
       Karma::Log.info("server.start", "version=#{Karma::VERSION} port=#{Karma.config.port}")
+      runtime.start_replication!
       runtime.server.start!
     end
 
@@ -22,7 +23,7 @@ module Karma
     end
 
     def shutdown! : Nil
-      @runtime.try(&.server.stop!)
+      @runtime.try(&.stop!)
       dump_all
       Karma::Log.info("server.stop", "version=#{Karma::VERSION}")
     end

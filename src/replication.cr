@@ -9,6 +9,7 @@ module Karma
 
     @@replayed_lsn = 0_u64
     @@loaded_lsn_dir : String?
+    @@source_lsn = 0_u64
     @@entries_applied = 0_i64
     @@last_received_unix = 0_i64
 
@@ -44,12 +45,19 @@ module Karma
       end
     end
 
-    def self.status(master_lsn : UInt64 = Karma::Wal.current_lsn, dump_dir = Karma.config.dump_dir)
+    def self.record_source_lsn(lsn : UInt64) : Nil
+      METRICS_MUTEX.synchronize do
+        @@source_lsn = lsn if lsn > @@source_lsn
+      end
+    end
+
+    def self.status(master_lsn : UInt64? = nil, dump_dir = Karma.config.dump_dir)
       replayed = replayed_lsn(dump_dir)
+      source = master_lsn || source_lsn
       {
         replayed_lsn:       replayed,
-        source_lsn:         master_lsn,
-        lag_entries:        lag_entries(master_lsn, replayed),
+        source_lsn:         source,
+        lag_entries:        lag_entries(source, replayed),
         entries_applied:    entries_applied,
         last_received_unix: last_received_unix,
       }
@@ -61,6 +69,7 @@ module Karma
         @@loaded_lsn_dir = nil
       end
       METRICS_MUTEX.synchronize do
+        @@source_lsn = 0_u64
         @@entries_applied = 0_i64
         @@last_received_unix = 0_i64
       end
@@ -92,6 +101,12 @@ module Karma
       return 0_u64 if replayed_lsn >= master_lsn
 
       master_lsn - replayed_lsn
+    end
+
+    private def self.source_lsn : UInt64
+      METRICS_MUTEX.synchronize do
+        Karma.config.role == "slave" ? @@source_lsn : Karma::Wal.current_lsn
+      end
     end
 
     private def self.record_applied(lsn : UInt64) : Nil
@@ -154,3 +169,5 @@ module Karma
     end
   end
 end
+
+require "./replication/poller"

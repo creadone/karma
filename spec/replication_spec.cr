@@ -13,6 +13,17 @@ private def replication_entry(lsn : UInt64, key : UInt64, value : UInt64 = 1_u64
   )
 end
 
+private class FakeReplicationPoller < Karma::Replication::Poller
+  def initialize(cluster : Karma::Cluster, @source_lsn : UInt64, @entries : Array(Karma::Wal::Entry))
+    super(cluster, "fake-master", 0, 100, 10.milliseconds)
+  end
+
+  protected def request_entries(after_lsn : UInt64) : Karma::Replication::Poller::Response
+    entries = @entries.select { |entry| entry.lsn > after_lsn }
+    Karma::Replication::Poller::Response.new(@source_lsn, entries)
+  end
+end
+
 describe Karma::Replication do
   it "applies WAL entries on a slave without appending local WAL" do
     master_dir = File.expand_path(".spec_replication_master_#{Time.local.to_unix_ms}")
@@ -85,6 +96,33 @@ describe Karma::Replication do
     status[:replayed_lsn].should eq(2_u64)
     status[:source_lsn].should eq(5_u64)
     status[:lag_entries].should eq(3_u64)
+  ensure
+    Karma.configure { |c| c.role = "master" }
+  end
+
+  it "polls replication entries from master transport" do
+    master_dir = File.expand_path(".spec_replication_poll_master_#{Time.local.to_unix_ms}")
+    slave_dir = File.expand_path(".spec_replication_poll_slave_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = master_dir }
+    master = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "links", key: 42_u64, value: 4_u64}.to_json, master)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "links", key: 43_u64, value: 5_u64}.to_json, master)
+    entries = Karma::Wal.entries_after(0_u64, 100, master_dir)
+
+    Karma.configure do |c|
+      c.dump_dir = slave_dir
+      c.role = "slave"
+    end
+    slave = Karma::Cluster.new
+    poller = FakeReplicationPoller.new(slave, Karma::Wal.current_lsn(master_dir), entries)
+
+    poller.poll_once.should eq(2_u64)
+
+    slave.get("links").sum(42_u64).should eq(4_u64)
+    slave.get("links").sum(43_u64).should eq(5_u64)
+    Karma::Replication.status["source_lsn"].should eq(2_u64)
+    Karma::Replication.status["lag_entries"].should eq(0_u64)
   ensure
     Karma.configure { |c| c.role = "master" }
   end

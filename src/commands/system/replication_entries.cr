@@ -9,11 +9,12 @@ module Karma
         )
 
         {
-          after_lsn: directive.after_lsn.not_nil!,
-          limit:     limit,
-          count:     entries.size,
-          entries:   entries.map(&.to_response),
-          next_lsn:  entries.empty? ? directive.after_lsn.not_nil! : entries.last.lsn,
+          after_lsn:  directive.after_lsn.not_nil!,
+          limit:      limit,
+          count:      entries.size,
+          source_lsn: Karma::Wal.current_lsn,
+          entries:    entries.map(&.to_response),
+          next_lsn:   entries.empty? ? directive.after_lsn.not_nil! : entries.last.lsn,
         }
       end
     end

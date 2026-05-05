@@ -7,6 +7,11 @@ Spec.before_each do
   Karma.configure do |c|
     c.dump_dir = File.expand_path(".spec_default_#{Time.local.to_unix_ms}_#{Random.rand(1_000_000)}")
     c.role = "master"
+    c.replication_source_host = nil
+    c.replication_source_port = 8080
+    c.replication_token = nil
+    c.replication_poll_interval_ms = 1_000
+    c.replication_batch_size = 1_000
   end
   Karma::Ingest.reset!
   Karma::Recovery.reset!

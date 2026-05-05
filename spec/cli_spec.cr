@@ -16,6 +16,11 @@ CLI_ENV_KEYS = %w[
   KARMA_QUERY_TIMEOUT_MS
   KARMA_SHUTDOWN_TIMEOUT_SECONDS
   KARMA_DUMP_RETENTION_PER_TREE
+  KARMA_REPLICATION_SOURCE_HOST
+  KARMA_REPLICATION_SOURCE_PORT
+  KARMA_REPLICATION_TOKEN
+  KARMA_REPLICATION_POLL_INTERVAL_MS
+  KARMA_REPLICATION_BATCH_SIZE
   KARMA_AUTH_TOKEN
   KARMA_READ_AUTH_TOKEN
   KARMA_LOG
@@ -43,6 +48,11 @@ describe Karma::Cli do
       c.query_timeout_ms = 1_000
       c.shutdown_timeout_seconds = 5
       c.dump_retention_per_tree = 5
+      c.replication_source_host = nil
+      c.replication_source_port = 8080
+      c.replication_token = nil
+      c.replication_poll_interval_ms = 1_000
+      c.replication_batch_size = 1_000
       c.log = false
     end
 
@@ -62,6 +72,11 @@ describe Karma::Cli do
       "--query-timeout-ms=250",
       "--shutdown-timeout=6",
       "--dump-retention-per-tree=2",
+      "--replication-source-host=127.0.0.2",
+      "--replication-source-port=7070",
+      "--replication-token=repl",
+      "--replication-poll-interval-ms=25",
+      "--replication-batch-size=500",
       "--auth-token=write",
       "--read-auth-token=read",
       "--log=true",
@@ -82,6 +97,11 @@ describe Karma::Cli do
     Karma.config.query_timeout_ms.should eq(250)
     Karma.config.shutdown_timeout_seconds.should eq(6)
     Karma.config.dump_retention_per_tree.should eq(2)
+    Karma.config.replication_source_host.should eq("127.0.0.2")
+    Karma.config.replication_source_port.should eq(7070)
+    Karma.config.replication_token.should eq("repl")
+    Karma.config.replication_poll_interval_ms.should eq(25)
+    Karma.config.replication_batch_size.should eq(500)
     Karma.config.auth_token.should eq("write")
     Karma.config.read_auth_token.should eq("read")
     Karma.config.log.should be_true
@@ -102,6 +122,11 @@ describe Karma::Cli do
       c.query_timeout_ms = 1_000
       c.shutdown_timeout_seconds = 5
       c.dump_retention_per_tree = 5
+      c.replication_source_host = nil
+      c.replication_source_port = 8080
+      c.replication_token = nil
+      c.replication_poll_interval_ms = 1_000
+      c.replication_batch_size = 1_000
       c.auth_token = nil
       c.read_auth_token = nil
       c.log = false
@@ -126,6 +151,11 @@ describe Karma::Cli do
       c.query_timeout_ms = 1_000
       c.shutdown_timeout_seconds = 5
       c.dump_retention_per_tree = 5
+      c.replication_source_host = nil
+      c.replication_source_port = 8080
+      c.replication_token = nil
+      c.replication_poll_interval_ms = 1_000
+      c.replication_batch_size = 1_000
       c.auth_token = nil
       c.read_auth_token = nil
       c.log = false
@@ -146,6 +176,11 @@ describe Karma::Cli do
     ENV["KARMA_QUERY_TIMEOUT_MS"] = "300"
     ENV["KARMA_SHUTDOWN_TIMEOUT_SECONDS"] = "11"
     ENV["KARMA_DUMP_RETENTION_PER_TREE"] = "7"
+    ENV["KARMA_REPLICATION_SOURCE_HOST"] = "10.0.0.1"
+    ENV["KARMA_REPLICATION_SOURCE_PORT"] = "7071"
+    ENV["KARMA_REPLICATION_TOKEN"] = "repl-env"
+    ENV["KARMA_REPLICATION_POLL_INTERVAL_MS"] = "50"
+    ENV["KARMA_REPLICATION_BATCH_SIZE"] = "250"
     ENV["KARMA_AUTH_TOKEN"] = "write-env"
     ENV["KARMA_READ_AUTH_TOKEN"] = "read-env"
     ENV["KARMA_LOG"] = "true"
@@ -167,6 +202,11 @@ describe Karma::Cli do
     Karma.config.query_timeout_ms.should eq(300)
     Karma.config.shutdown_timeout_seconds.should eq(11)
     Karma.config.dump_retention_per_tree.should eq(7)
+    Karma.config.replication_source_host.should eq("10.0.0.1")
+    Karma.config.replication_source_port.should eq(7071)
+    Karma.config.replication_token.should eq("repl-env")
+    Karma.config.replication_poll_interval_ms.should eq(50)
+    Karma.config.replication_batch_size.should eq(250)
     Karma.config.auth_token.should eq("write-env")
     Karma.config.read_auth_token.should eq("read-env")
     Karma.config.log.should be_true
@@ -188,6 +228,11 @@ describe Karma::Cli do
       c.query_timeout_ms = 1_000
       c.shutdown_timeout_seconds = 5
       c.dump_retention_per_tree = 5
+      c.replication_source_host = nil
+      c.replication_source_port = 8080
+      c.replication_token = nil
+      c.replication_poll_interval_ms = 1_000
+      c.replication_batch_size = 1_000
       c.auth_token = nil
       c.read_auth_token = nil
       c.log = false
@@ -233,6 +278,11 @@ describe Karma::Cli do
       c.query_timeout_ms = 1_000
       c.shutdown_timeout_seconds = 5
       c.dump_retention_per_tree = 5
+      c.replication_source_host = nil
+      c.replication_source_port = 8080
+      c.replication_token = nil
+      c.replication_poll_interval_ms = 1_000
+      c.replication_batch_size = 1_000
       c.auth_token = nil
       c.read_auth_token = nil
       c.log = false

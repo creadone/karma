@@ -157,6 +157,22 @@ Options:
 --dump-retention-per-tree=count
   Number of snapshots to keep per tree after dump_all. Default: 5
 
+--replication-source-host=host
+  Master host for slave WAL polling. Set only on slave nodes.
+
+--replication-source-port=port
+  Master port for slave WAL polling. Default: 8080
+
+--replication-token=token
+  Token used by slave polling requests. Usually this should match the master's
+  read-only token.
+
+--replication-poll-interval-ms=ms
+  Slave polling interval. Default: 1000
+
+--replication-batch-size=count
+  Maximum WAL entries fetched by one slave poll. Default: 1000, max: 10000
+
 --log=flag
   Emit structured JSON logs to stdout/stderr. Default: true
 ```
@@ -219,6 +235,21 @@ KARMA_READ_AUTH_TOKEN
 
 KARMA_DUMP_RETENTION_PER_TREE
   Same as --dump-retention-per-tree.
+
+KARMA_REPLICATION_SOURCE_HOST
+  Same as --replication-source-host.
+
+KARMA_REPLICATION_SOURCE_PORT
+  Same as --replication-source-port.
+
+KARMA_REPLICATION_TOKEN
+  Same as --replication-token.
+
+KARMA_REPLICATION_POLL_INTERVAL_MS
+  Same as --replication-poll-interval-ms.
+
+KARMA_REPLICATION_BATCH_SIZE
+  Same as --replication-batch-size.
 
 KARMA_LOG
   Same as --log.
@@ -597,6 +628,18 @@ Inspect replication bootstrap state:
 `replication.status` includes `replayed_lsn`, `replication_lag_entries`,
 `replication_entries_applied`, and `replication_last_received_unix`. Slaves use
 `karma.replication.lsn` to persist the last applied master WAL LSN.
+
+Start a polling slave:
+
+```sh
+bin/karma \
+  --role=slave \
+  --port=8081 \
+  --directory=/var/lib/karma-slave \
+  --replication-source-host=127.0.0.1 \
+  --replication-source-port=8080 \
+  --replication-token=read-secret
+```
 
 ### Legacy v1
 

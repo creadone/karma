@@ -9,6 +9,14 @@ module Karma
       def initialize(@lsn : UInt64, @entry : JSON::Any)
       end
 
+      def self.from_response(object : JSON::Any) : Entry
+        hash = object.as_h
+        lsn = hash["lsn"].as_i64.to_u64
+        entry = hash["entry"]
+
+        new(lsn, entry)
+      end
+
       def to_response
         {
           lsn:   lsn,

@@ -263,6 +263,7 @@ describe "operations commands" do
     response["after_lsn"].as_i.should eq(1)
     response["limit"].as_i.should eq(2)
     response["count"].as_i.should eq(2)
+    response["source_lsn"].as_i.should eq(3)
     response["next_lsn"].as_i.should eq(3)
     response["entries"].as_a.map { |entry| entry["lsn"].as_i }.should eq([2, 3])
     response["entries"].as_a.first["entry"]["key"].as_i.should eq(42)
