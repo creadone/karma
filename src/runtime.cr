@@ -25,8 +25,15 @@ module Karma
       return unless Karma::Backup.dumps(Karma.config.dump_dir).empty?
 
       Karma::Replication::SnapshotClient.build?.try do |client|
-        lsn = client.bootstrap_files(Karma.config.dump_dir)
-        Karma::Log.info("replication.snapshot_bootstrap", "last_lsn=#{lsn}") if lsn > 0
+        Karma::Replication.record_bootstrap_attempt
+        begin
+          lsn = client.bootstrap_files(Karma.config.dump_dir)
+          Karma::Replication.record_bootstrap_success
+          Karma::Log.info("replication.snapshot_bootstrap", "last_lsn=#{lsn}") if lsn > 0
+        rescue ex
+          Karma::Replication.record_bootstrap_error(ex.message || ex.class.name)
+          raise ex
+        end
       end
     end
 

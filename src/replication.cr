@@ -12,6 +12,20 @@ module Karma
     @@source_lsn = 0_u64
     @@entries_applied = 0_i64
     @@last_received_unix = 0_i64
+    @@poll_attempt_count = 0_i64
+    @@poll_success_count = 0_i64
+    @@poll_error_count = 0_i64
+    @@last_poll_attempt_unix = 0_i64
+    @@last_poll_success_unix = 0_i64
+    @@last_poll_error_unix = 0_i64
+    @@last_poll_error : String?
+    @@bootstrap_attempt_count = 0_i64
+    @@bootstrap_success_count = 0_i64
+    @@bootstrap_error_count = 0_i64
+    @@last_bootstrap_attempt_unix = 0_i64
+    @@last_bootstrap_success_unix = 0_i64
+    @@last_bootstrap_error_unix = 0_i64
+    @@last_bootstrap_error : String?
 
     def self.apply(entries : Array(Karma::Wal::Entry), cluster : Cluster, dump_dir = Karma.config.dump_dir) : UInt64
       Karma::State.synchronize do
@@ -66,15 +80,75 @@ module Karma
       end
     end
 
+    def self.record_poll_attempt : Nil
+      METRICS_MUTEX.synchronize do
+        @@poll_attempt_count += 1
+        @@last_poll_attempt_unix = Time.utc.to_unix
+      end
+    end
+
+    def self.record_poll_success : Nil
+      METRICS_MUTEX.synchronize do
+        @@poll_success_count += 1
+        @@last_poll_success_unix = Time.utc.to_unix
+        @@last_poll_error = nil
+      end
+    end
+
+    def self.record_poll_error(error : String) : Nil
+      METRICS_MUTEX.synchronize do
+        @@poll_error_count += 1
+        @@last_poll_error_unix = Time.utc.to_unix
+        @@last_poll_error = error
+      end
+    end
+
+    def self.record_bootstrap_attempt : Nil
+      METRICS_MUTEX.synchronize do
+        @@bootstrap_attempt_count += 1
+        @@last_bootstrap_attempt_unix = Time.utc.to_unix
+      end
+    end
+
+    def self.record_bootstrap_success : Nil
+      METRICS_MUTEX.synchronize do
+        @@bootstrap_success_count += 1
+        @@last_bootstrap_success_unix = Time.utc.to_unix
+        @@last_bootstrap_error = nil
+      end
+    end
+
+    def self.record_bootstrap_error(error : String) : Nil
+      METRICS_MUTEX.synchronize do
+        @@bootstrap_error_count += 1
+        @@last_bootstrap_error_unix = Time.utc.to_unix
+        @@last_bootstrap_error = error
+      end
+    end
+
     def self.status(master_lsn : UInt64? = nil, dump_dir = Karma.config.dump_dir)
       replayed = replayed_lsn(dump_dir)
       source = master_lsn || source_lsn
       {
-        replayed_lsn:       replayed,
-        source_lsn:         source,
-        lag_entries:        lag_entries(source, replayed),
-        entries_applied:    entries_applied,
-        last_received_unix: last_received_unix,
+        replayed_lsn:                replayed,
+        source_lsn:                  source,
+        lag_entries:                 lag_entries(source, replayed),
+        entries_applied:             entries_applied,
+        last_received_unix:          last_received_unix,
+        poll_attempt_count:          poll_attempt_count,
+        poll_success_count:          poll_success_count,
+        poll_error_count:            poll_error_count,
+        last_poll_attempt_unix:      last_poll_attempt_unix,
+        last_poll_success_unix:      last_poll_success_unix,
+        last_poll_error_unix:        last_poll_error_unix,
+        last_poll_error:             last_poll_error,
+        bootstrap_attempt_count:     bootstrap_attempt_count,
+        bootstrap_success_count:     bootstrap_success_count,
+        bootstrap_error_count:       bootstrap_error_count,
+        last_bootstrap_attempt_unix: last_bootstrap_attempt_unix,
+        last_bootstrap_success_unix: last_bootstrap_success_unix,
+        last_bootstrap_error_unix:   last_bootstrap_error_unix,
+        last_bootstrap_error:        last_bootstrap_error,
       }
     end
 
@@ -87,6 +161,20 @@ module Karma
         @@source_lsn = 0_u64
         @@entries_applied = 0_i64
         @@last_received_unix = 0_i64
+        @@poll_attempt_count = 0_i64
+        @@poll_success_count = 0_i64
+        @@poll_error_count = 0_i64
+        @@last_poll_attempt_unix = 0_i64
+        @@last_poll_success_unix = 0_i64
+        @@last_poll_error_unix = 0_i64
+        @@last_poll_error = nil
+        @@bootstrap_attempt_count = 0_i64
+        @@bootstrap_success_count = 0_i64
+        @@bootstrap_error_count = 0_i64
+        @@last_bootstrap_attempt_unix = 0_i64
+        @@last_bootstrap_success_unix = 0_i64
+        @@last_bootstrap_error_unix = 0_i64
+        @@last_bootstrap_error = nil
       end
     end
 
@@ -137,6 +225,62 @@ module Karma
 
     private def self.last_received_unix : Int64
       METRICS_MUTEX.synchronize { @@last_received_unix }
+    end
+
+    private def self.poll_attempt_count : Int64
+      METRICS_MUTEX.synchronize { @@poll_attempt_count }
+    end
+
+    private def self.poll_success_count : Int64
+      METRICS_MUTEX.synchronize { @@poll_success_count }
+    end
+
+    private def self.poll_error_count : Int64
+      METRICS_MUTEX.synchronize { @@poll_error_count }
+    end
+
+    private def self.last_poll_attempt_unix : Int64
+      METRICS_MUTEX.synchronize { @@last_poll_attempt_unix }
+    end
+
+    private def self.last_poll_success_unix : Int64
+      METRICS_MUTEX.synchronize { @@last_poll_success_unix }
+    end
+
+    private def self.last_poll_error_unix : Int64
+      METRICS_MUTEX.synchronize { @@last_poll_error_unix }
+    end
+
+    private def self.last_poll_error : String?
+      METRICS_MUTEX.synchronize { @@last_poll_error }
+    end
+
+    private def self.bootstrap_attempt_count : Int64
+      METRICS_MUTEX.synchronize { @@bootstrap_attempt_count }
+    end
+
+    private def self.bootstrap_success_count : Int64
+      METRICS_MUTEX.synchronize { @@bootstrap_success_count }
+    end
+
+    private def self.bootstrap_error_count : Int64
+      METRICS_MUTEX.synchronize { @@bootstrap_error_count }
+    end
+
+    private def self.last_bootstrap_attempt_unix : Int64
+      METRICS_MUTEX.synchronize { @@last_bootstrap_attempt_unix }
+    end
+
+    private def self.last_bootstrap_success_unix : Int64
+      METRICS_MUTEX.synchronize { @@last_bootstrap_success_unix }
+    end
+
+    private def self.last_bootstrap_error_unix : Int64
+      METRICS_MUTEX.synchronize { @@last_bootstrap_error_unix }
+    end
+
+    private def self.last_bootstrap_error : String?
+      METRICS_MUTEX.synchronize { @@last_bootstrap_error }
     end
 
     private def self.ensure_lsn_loaded(dump_dir : String) : Nil

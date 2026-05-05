@@ -24,6 +24,16 @@ private class FakeReplicationPoller < Karma::Replication::Poller
   end
 end
 
+private class FailingReplicationPoller < Karma::Replication::Poller
+  def initialize(cluster : Karma::Cluster)
+    super(cluster, "fake-master", 0, 100, 10.milliseconds)
+  end
+
+  protected def request_entries(after_lsn : UInt64) : Karma::Replication::Poller::Response
+    raise Karma::Error.new("replication_error", "boom")
+  end
+end
+
 private class FakeSnapshotClient < Karma::Replication::SnapshotClient
   def initialize(@info_response : JSON::Any, @master_dir : String)
     super("fake-master", 0)
@@ -179,6 +189,41 @@ describe Karma::Replication do
     status[:replayed_lsn].should eq(2_u64)
     status[:source_lsn].should eq(5_u64)
     status[:lag_entries].should eq(3_u64)
+  ensure
+    Karma.configure { |c| c.role = "master" }
+  end
+
+  it "records poll success and error metrics" do
+    master_dir = File.expand_path(".spec_replication_poll_metrics_master_#{Time.local.to_unix_ms}")
+    slave_dir = File.expand_path(".spec_replication_poll_metrics_slave_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = master_dir }
+    master = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "links", key: 42_u64}.to_json, master)
+    entries = Karma::Wal.entries_after(0_u64, 100, master_dir)
+
+    Karma.configure do |c|
+      c.dump_dir = slave_dir
+      c.role = "slave"
+    end
+    slave = Karma::Cluster.new
+
+    FakeReplicationPoller.new(slave, Karma::Wal.current_lsn(master_dir), entries).poll_once.should eq(1_u64)
+    status = Karma::Replication.status
+    status[:poll_attempt_count].should eq(1)
+    status[:poll_success_count].should eq(1)
+    status[:poll_error_count].should eq(0)
+    status[:last_poll_success_unix].should be > 0
+    status[:last_poll_error].should be_nil
+
+    expect_raises(Karma::Error, "boom") do
+      FailingReplicationPoller.new(slave).poll_once
+    end
+    failed = Karma::Replication.status
+    failed[:poll_attempt_count].should eq(2)
+    failed[:poll_error_count].should eq(1)
+    failed[:last_poll_error].should eq("boom")
+    failed[:last_poll_error_unix].should be > 0
   ensure
     Karma.configure { |c| c.role = "master" }
   end

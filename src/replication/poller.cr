@@ -54,10 +54,18 @@ module Karma
       end
 
       def poll_once : UInt64
-        after_lsn = Karma::Replication.replayed_lsn
-        response = request_entries(after_lsn)
-        Karma::Replication.record_source_lsn(response.source_lsn)
-        Karma::Replication.apply(response.entries, @cluster)
+        Karma::Replication.record_poll_attempt
+        begin
+          after_lsn = Karma::Replication.replayed_lsn
+          response = request_entries(after_lsn)
+          Karma::Replication.record_source_lsn(response.source_lsn)
+          lsn = Karma::Replication.apply(response.entries, @cluster)
+          Karma::Replication.record_poll_success
+          lsn
+        rescue ex
+          Karma::Replication.record_poll_error(ex.message || ex.class.name)
+          raise ex
+        end
       end
 
       private def run : Nil

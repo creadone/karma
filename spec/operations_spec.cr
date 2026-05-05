@@ -214,6 +214,10 @@ describe "operations commands" do
     status["wal_enabled"].as_bool.should be_true
     status["wal_current_lsn"].as_i.should be > 0
     status["last_snapshot_lsn"].as_i.should be > 0
+    status["replication_poll_attempt_count"].as_i.should eq(0)
+    status["replication_poll_error_count"].as_i.should eq(0)
+    status["replication_bootstrap_attempt_count"].as_i.should eq(0)
+    status["replication_bootstrap_error_count"].as_i.should eq(0)
     status["latest_snapshots"].as_a.first["tree"].as_s.should eq("articles")
     status["recovery"]["checkpoint_count"].as_i.should eq(1)
     status["recovery"]["checkpoints"].as_a.first["source"].as_s.should eq("clickhouse-links")
