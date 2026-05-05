@@ -2,20 +2,18 @@ module Karma
   module Commands
     module Find
       def self.call(directive, cluster)
-        series = directive.series
         range = directive.bucket_range
-        tree = cluster.get(series.name)
+        tree = cluster.get(directive.series_name)
 
-        unless directive.key.nil?
-          key = directive.series_key
+        if directive.keyed?
           return tree.find(
-            key.value,
+            directive.key_value,
             range.from.value,
             range.to.value
           )
-        else
-          return cluster.tree_series(series.name, range)
         end
+
+        cluster.tree_series(directive.series_name, range)
       end
     end
   end

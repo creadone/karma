@@ -3,7 +3,7 @@ module Karma
     module Compact
       def self.call(directive, cluster)
         if directive.tree_name
-          cluster.compact(directive.series.name)
+          cluster.compact(directive.series_name)
         else
           cluster.compact
         end

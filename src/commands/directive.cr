@@ -48,8 +48,16 @@ module Karma
         Karma::TimeSeries::Series.new(tree_name.not_nil!)
       end
 
+      def series_name : String
+        tree_name.not_nil!
+      end
+
       def series_key : Karma::TimeSeries::Key
         Karma::TimeSeries::Key.new(key.not_nil!)
+      end
+
+      def key_value : UInt64
+        key.not_nil!
       end
 
       def bucket_from : Karma::TimeSeries::Bucket
@@ -62,6 +70,16 @@ module Karma
 
       def bucket_range : Karma::TimeSeries::BucketRange
         Karma::TimeSeries::BucketRange.new(bucket_from, bucket_to)
+      end
+
+      def bucket_range? : Karma::TimeSeries::BucketRange?
+        return nil if time_from.nil? && time_to.nil?
+
+        bucket_range
+      end
+
+      def keyed? : Bool
+        !key.nil?
       end
 
       def write_bucket : Karma::TimeSeries::Bucket

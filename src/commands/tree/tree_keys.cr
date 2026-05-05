@@ -3,7 +3,7 @@ module Karma
     module TreeKeys
       def self.call(directive, cluster)
         cluster.tree_keys(
-          directive.series.name,
+          directive.series_name,
           directive.limit.not_nil!,
           directive.cursor
         )

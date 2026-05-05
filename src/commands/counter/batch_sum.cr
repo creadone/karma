@@ -2,17 +2,12 @@ module Karma
   module Commands
     module BatchSum
       def self.call(directive, cluster)
-        series = directive.series
-        tree = cluster.get(series.name)
+        tree = cluster.get(directive.series_name)
         keys = directive.keys.not_nil!
+        range = directive.bucket_range?
 
         response = keys.map do |key|
-          value = if directive.time_from.nil? && directive.time_to.nil?
-                    tree.sum(key)
-                  else
-                    range = directive.bucket_range
-                    tree.sum(key, range.from.value, range.to.value)
-                  end
+          value = range ? tree.sum(key, range.from.value, range.to.value) : tree.sum(key)
 
           {key: key, value: value}
         end

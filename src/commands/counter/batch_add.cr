@@ -2,10 +2,9 @@ module Karma
   module Commands
     module BatchAdd
       def self.call(directive, cluster)
-        series = directive.series
         items = directive.items.not_nil!
 
-        cluster.pick(series.name) do |tree|
+        cluster.pick(directive.series_name) do |tree|
           return apply(tree, items)
         end
       end
