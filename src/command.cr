@@ -79,32 +79,32 @@ module Karma
     end
 
     COMMANDS = {
-      "trees"     => Commands::Trees,
-      "create"    => Commands::Create,
-      "drop"      => Commands::Drop,
-      "dump"      => Commands::Dump,
-      "dump_all"  => Commands::DumpAll,
-      "dumps"     => Commands::Dumps,
-      "load"      => Commands::Load,
-      "increment" => Commands::Increment,
-      "decrement" => Commands::Decrement,
-      "sum"       => Commands::Sum,
-      "batch_sum" => Commands::BatchSum,
-      "batch_add" => Commands::BatchAdd,
+      "trees"         => Commands::Trees,
+      "create"        => Commands::Create,
+      "drop"          => Commands::Drop,
+      "dump"          => Commands::Dump,
+      "dump_all"      => Commands::DumpAll,
+      "dumps"         => Commands::Dumps,
+      "load"          => Commands::Load,
+      "increment"     => Commands::Increment,
+      "decrement"     => Commands::Decrement,
+      "sum"           => Commands::Sum,
+      "batch_sum"     => Commands::BatchSum,
+      "batch_add"     => Commands::BatchAdd,
       "delete_before" => Commands::DeleteBefore,
-      "compact"   => Commands::Compact,
-      "find"      => Commands::Find,
-      "reset"     => Commands::Reset,
-      "delete"    => Commands::Delete,
-      "health"    => Commands::Health,
-      "stats"     => Commands::Stats,
-      "metrics"   => Commands::Metrics,
-      "verify"    => Commands::Verify,
-      "ping"      => Commands::Ping,
-      "tree_info" => Commands::TreeInfo,
-      "tree_keys" => Commands::TreeKeys,
-      "tree_summary" => Commands::TreeSummary,
-      "tree_top"  => Commands::TreeTop,
+      "compact"       => Commands::Compact,
+      "find"          => Commands::Find,
+      "reset"         => Commands::Reset,
+      "delete"        => Commands::Delete,
+      "health"        => Commands::Health,
+      "stats"         => Commands::Stats,
+      "metrics"       => Commands::Metrics,
+      "verify"        => Commands::Verify,
+      "ping"          => Commands::Ping,
+      "tree_info"     => Commands::TreeInfo,
+      "tree_keys"     => Commands::TreeKeys,
+      "tree_summary"  => Commands::TreeSummary,
+      "tree_top"      => Commands::TreeTop,
       "snapshot_info" => Commands::SnapshotInfo,
       "ingest_begin"  => Commands::IngestBegin,
       "ingest_chunk"  => Commands::IngestChunk,
@@ -130,18 +130,29 @@ module Karma
       snapshot_info
     ]
 
-    def self.call(message, cluster, persist = true, authorize = true, synchronize = true)
+    def self.call(message, cluster, persist = true, authorize = true, synchronize = true, track_legacy = true)
       started_at = Time.monotonic
       protocol_version = request_protocol_version(message)
       begin
         directive = parse(message)
         protocol_version = directive.protocol_version
+        if track_legacy && protocol_version == Karma::Protocol::VERSION
+          Karma::Operations.record_legacy_request
+          Karma::Log.info("protocol.v1_request", "command=#{directive.command}")
+        end
+
         if COMMANDS.has_key?(directive.command)
           authenticate(directive) if authorize
           validate(directive)
           response = apply(directive, cluster, persist, synchronize)
+          answer = Karma::Protocol.success(response, protocol_version)
+          if response_too_large?(answer)
+            Karma::Operations.record_command(false, elapsed_ms(started_at))
+            return Karma::Protocol.error("response_too_large", "Response exceeds #{Karma.config.max_response_bytes} bytes", protocol_version)
+          end
+
           Karma::Operations.record_command(true, elapsed_ms(started_at))
-          return Karma::Protocol.success(response, protocol_version)
+          return answer
         else
           raise Karma::Error.new("unknown_command", "Unknown command #{directive.command}")
         end
@@ -182,6 +193,11 @@ module Karma
 
     private def self.elapsed_ms(started_at : Time::Span) : Float64
       (Time.monotonic - started_at).total_milliseconds
+    end
+
+    private def self.response_too_large?(response : String) : Bool
+      max_response_bytes = Karma.config.max_response_bytes
+      max_response_bytes > 0 && response.bytesize > max_response_bytes
     end
 
     private def self.apply(directive : Directive, cluster, persist : Bool, synchronize : Bool)

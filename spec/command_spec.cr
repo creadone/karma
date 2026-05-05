@@ -288,6 +288,26 @@ describe Karma::Commands do
     parsed["response"].as_a.should be_empty
   end
 
+  it "rejects responses that exceed max response bytes" do
+    cluster = Karma::Cluster.new
+    Karma::Commands.call({v: 2, op: "tree.create", tree: "links"}.to_json, cluster)
+    Karma.configure { |c| c.max_response_bytes = 120 }
+
+    response = Karma::Commands.call({
+      v:    2,
+      op:   "counter.batch_sum",
+      tree: "links",
+      keys: [1_u64, 2_u64, 3_u64, 4_u64, 5_u64],
+    }.to_json, cluster)
+    parsed = parse_response(response)
+
+    parsed["protocol_version"].as_i.should eq(2)
+    parsed["success"].as_bool.should be_false
+    parsed["error_code"].as_s.should eq("response_too_large")
+  ensure
+    Karma.configure { |c| c.max_response_bytes = 1_048_576 }
+  end
+
   it "supports v2 batch increments" do
     cluster = Karma::Cluster.new
 
@@ -331,10 +351,10 @@ describe Karma::Commands do
     cluster = Karma::Cluster.new
 
     response = Karma::Commands.call({
-      v:     2,
-      op:    "series.batch_add",
+      v:      2,
+      op:     "series.batch_add",
       series: "links",
-      items: [[42_u64, 20260505_u64, 3_u64], [43_u64, 20260505_u64]],
+      items:  [[42_u64, 20260505_u64, 3_u64], [43_u64, 20260505_u64]],
     }.to_json, cluster)
     parsed = parse_response(response)
 
@@ -348,10 +368,10 @@ describe Karma::Commands do
     cluster = Karma::Cluster.new
 
     response = Karma::Commands.call({
-      v:     2,
-      op:    "series.batch_add",
+      v:      2,
+      op:     "series.batch_add",
       series: "links",
-      items: [[42_u64, 20260505_u64, 0_u64]],
+      items:  [[42_u64, 20260505_u64, 0_u64]],
     }.to_json, cluster)
     parsed = parse_response(response)
 

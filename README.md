@@ -3,9 +3,10 @@
   <h3 align="center">Karma</h3>
 </p>
 
-Karma is a small TCP database for positive counters with one-day granularity.
-It stores named groups of counters called trees. Each tree contains many
-numeric keys, and each key stores daily values plus a total.
+Karma is a small TCP database for hot time-series counters with one-day
+granularity. It stores named series, historically called trees. Each series
+contains many numeric keys, and each key stores daily bucket values plus a
+total.
 
 Karma is useful when a service needs fast counters for limits, usage tracking,
 or short-link click statistics:
@@ -110,6 +111,9 @@ Options:
 --max-request-bytes=bytes
   Maximum JSON request line size. Default: 4096
 
+--max-response-bytes=bytes
+  Maximum JSON response size. Use 0 to disable the limit. Default: 1048576
+
 --read-timeout=seconds
   Client socket read timeout. Default: 5
 
@@ -136,11 +140,23 @@ Boolean flags use `true` or `false`.
 Karma speaks newline-delimited JSON over TCP. Each request is one JSON object
 followed by `\n`. Each response is one JSON object followed by `\r\n`.
 
+Protocol v2 is the preferred protocol for new clients. Requests use a stable
+`v: 2` envelope, namespaced `op` values, and time-series terminology:
+
+```json
+{"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":1}
+```
+
+The older v1 protocol remains supported for compatibility and WAL replay. v1
+requests use `command`, `tree_name`, `date`, and `time_from`/`time_to`. v1 usage
+is counted in `stats.legacy_request_count` and
+`karma_protocol_v1_requests_total`.
+
 Response schema:
 
 ```json
 {
-  "protocol_version": 1,
+  "protocol_version": 2,
   "success": true,
   "response": "OK",
   "error_code": null
@@ -151,9 +167,9 @@ Error response:
 
 ```json
 {
-  "protocol_version": 1,
+  "protocol_version": 2,
   "success": false,
-  "response": "Field tree_name is required",
+  "response": "Field tree or series is required",
   "error_code": "validation_error"
 }
 ```
@@ -167,33 +183,37 @@ Stable error codes:
 * `unauthorized`
 * `forbidden`
 * `request_too_large`
+* `response_too_large`
 * `internal_error`
 
 If `--auth-token` is configured, include `token` in every client request:
 
 ```json
-{"command":"ping","token":"secret"}
+{"v":2,"op":"system.ping","token":"secret"}
 ```
 
 If `--read-auth-token` is configured, that token can execute read-only
-commands such as `ping`, `trees`, `sum`, `find`, `stats`, `metrics`,
-`tree.info`, `tree.keys`, `tree.summary`, `tree.top` and `snapshot.info`.
+commands such as `system.ping`, `tree.list`, `counter.sum`,
+`counter.batch_sum`, `counter.series`, `system.stats`, `system.metrics`,
+`tree.info`, `tree.keys`, `tree.summary`, `tree.top`, and `snapshot.info`.
 Mutating or admin commands return `forbidden` for a read-only token.
 
 Tokens are not written to WAL.
 
 ## Data Model
 
-* A tree is a named collection of counters.
-* A key is an unsigned 64-bit integer inside a tree.
-* `increment` and `decrement` operate on the current local day.
-* Dates are unsigned integers in `YYYYMMDD` format, for example `20260504`.
+* A series is a named collection of counters. The storage layer and legacy API
+  still use the word tree.
+* A key is an unsigned 64-bit integer inside a series.
+* A bucket is a day in `YYYYMMDD` format, for example `20260504`.
 * Counter values are unsigned 64-bit integers and never go below zero.
+* `counter.increment` and `counter.decrement` use today's bucket when `bucket`
+  is omitted.
 
-Read commands do not create missing trees. Missing trees return `not_found`.
-For existing trees, reading a missing key returns empty or zero values.
+Read commands do not create missing series. Missing series return `not_found`.
+For existing series, reading a missing key returns empty or zero values.
 
-## Commands
+## v2 Commands
 
 ### ping
 
@@ -202,211 +222,258 @@ Check that the server responds.
 Request:
 
 ```json
-{"command":"ping"}
+{"v":2,"op":"system.ping"}
 ```
 
 Response:
 
 ```json
-{"protocol_version":1,"success":true,"response":"pong","error_code":null}
+{"protocol_version":2,"success":true,"response":"pong","error_code":null}
 ```
 
-### create
+### tree.create
 
-Create a tree if it does not already exist.
+Create a series if it does not already exist.
 
 ```json
-{"command":"create","tree_name":"links"}
+{"v":2,"op":"tree.create","series":"links"}
 ```
 
 Response:
 
 ```json
-{"protocol_version":1,"success":true,"response":"OK","error_code":null}
+{"protocol_version":2,"success":true,"response":"OK","error_code":null}
 ```
 
-### drop
+### tree.drop
 
-Delete a tree from memory.
+Delete a series from memory.
 
 ```json
-{"command":"drop","tree_name":"links"}
+{"v":2,"op":"tree.drop","series":"links"}
 ```
 
-### trees
+### tree.list
 
-List tree names.
+List series names.
 
 ```json
-{"command":"trees"}
+{"v":2,"op":"tree.list"}
 ```
 
-### increment
+### counter.increment
 
-Increment a key for the current day by `1`.
+Increment a key for a bucket. If `bucket` is omitted, Karma uses today's day.
 
 ```json
-{"command":"increment","tree_name":"links","key":42}
+{"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":1}
 ```
 
 Response `response` is the increment amount:
 
 ```json
-{"protocol_version":1,"success":true,"response":1,"error_code":null}
+{"protocol_version":2,"success":true,"response":1,"error_code":null}
 ```
 
-### decrement
+### counter.decrement
 
-Decrement a key for the current day by `1`.
+Decrement a key for a bucket. The counter never goes below zero.
 
 ```json
-{"command":"decrement","tree_name":"links","key":42}
+{"v":2,"op":"counter.decrement","series":"links","key":42,"bucket":20260505,"value":1}
 ```
 
-The counter never goes below zero.
-
-### sum
+### counter.sum
 
 Read total for a key:
 
 ```json
-{"command":"sum","tree_name":"links","key":42}
+{"v":2,"op":"counter.sum","series":"links","key":42}
 ```
 
 Read total for a date range:
 
 ```json
 {
-  "command": "sum",
-  "tree_name": "links",
+  "v": 2,
+  "op": "counter.sum",
+  "series": "links",
   "key": 42,
-  "time_from": 20260501,
-  "time_to": 20260504
+  "range": {"from": 20260501, "to": 20260504}
 }
 ```
 
-### find
+### counter.batch_sum
+
+Read totals for many keys in one request:
+
+```json
+{"v":2,"op":"counter.batch_sum","series":"links","keys":[41,42,43]}
+```
+
+With a range:
+
+```json
+{
+  "v": 2,
+  "op": "counter.batch_sum",
+  "series": "links",
+  "keys": [41, 42, 43],
+  "range": {"from": 20260501, "to": 20260504}
+}
+```
+
+### counter.series
 
 Read daily values for one key:
 
 ```json
 {
-  "command": "find",
-  "tree_name": "links",
+  "v": 2,
+  "op": "counter.series",
+  "series": "links",
   "key": 42,
-  "time_from": 20260501,
-  "time_to": 20260504
+  "range": {"from": 20260501, "to": 20260504}
 }
 ```
 
-Read daily values for all keys in a tree:
+### series.batch_add
+
+Add many `[key, bucket, value]` items in one request:
 
 ```json
 {
-  "command": "find",
-  "tree_name": "links",
-  "time_from": 20260501,
-  "time_to": 20260504
+  "v": 2,
+  "op": "series.batch_add",
+  "series": "links",
+  "items": [[42, 20260505, 10], [43, 20260505, 3]]
 }
 ```
 
-### delete
+### tree.series
+
+Read daily values for all keys in a series:
+
+```json
+{
+  "v": 2,
+  "op": "tree.series",
+  "series": "links",
+  "range": {"from": 20260501, "to": 20260504}
+}
+```
+
+### tree.summary
+
+Return key count, bucket count, and total sum for a series:
+
+```json
+{"v":2,"op":"tree.summary","series":"links"}
+```
+
+With a range:
+
+```json
+{"v":2,"op":"tree.summary","series":"links","range":{"from":20260501,"to":20260504}}
+```
+
+### tree.top
+
+Return top keys by total value:
+
+```json
+{"v":2,"op":"tree.top","series":"links","limit":100}
+```
+
+### tree.keys
+
+Return keys with cursor pagination:
+
+```json
+{"v":2,"op":"tree.keys","series":"links","limit":1000,"cursor":0}
+```
+
+### delete and reset
 
 Delete date-range values for one key:
 
 ```json
-{
-  "command": "delete",
-  "tree_name": "links",
-  "key": 42,
-  "time_from": 20260501,
-  "time_to": 20260504
-}
+{"v":2,"op":"counter.delete_range","series":"links","key":42,"range":{"from":20260501,"to":20260504}}
 ```
 
-Delete date-range values for all keys in a tree:
+Delete date-range values for all keys in a series:
 
 ```json
-{
-  "command": "delete",
-  "tree_name": "links",
-  "time_from": 20260501,
-  "time_to": 20260504
-}
+{"v":2,"op":"tree.delete_range","series":"links","range":{"from":20260501,"to":20260504}}
 ```
 
-### reset
-
-Reset one key:
+Delete old buckets:
 
 ```json
-{"command":"reset","tree_name":"links","key":42}
+{"v":2,"op":"series.delete_before","series":"links","before":20260401}
 ```
 
-Reset all keys in a tree:
+Reset one key or a whole series:
 
 ```json
-{"command":"reset","tree_name":"links"}
+{"v":2,"op":"counter.reset","series":"links","key":42}
+{"v":2,"op":"tree.reset","series":"links"}
 ```
 
-### dump
+### ingest
 
-Write one tree snapshot to the configured directory.
+Streaming ingest loads large batches as ordered chunks. The first production
+mode is `add`; duplicate chunks are skipped and out-of-order chunks are
+rejected before they are applied.
 
 ```json
-{"command":"dump","tree_name":"links"}
+{"v":2,"op":"ingest.begin","stream_id":"import-20260505","mode":"add","granularity":"day"}
+{"v":2,"op":"ingest.chunk","stream_id":"import-20260505","series":"links","chunk_seq":1,"items":[[42,20260505,10]]}
+{"v":2,"op":"ingest.commit","stream_id":"import-20260505"}
 ```
 
-### dump_all
-
-Write snapshots for all trees, truncate WAL after successful snapshotting, and
-prune old snapshots according to `--dump-retention-per-tree`.
+Abort an active stream:
 
 ```json
-{"command":"dump_all"}
+{"v":2,"op":"ingest.abort","stream_id":"import-20260505"}
 ```
 
-### dumps
+### snapshots
 
-List known snapshot files, newest first.
+Create, list, load, verify, and inspect snapshots:
 
 ```json
-{"command":"dumps"}
+{"v":2,"op":"snapshot.create","series":"links"}
+{"v":2,"op":"snapshot.create_all"}
+{"v":2,"op":"snapshot.list"}
+{"v":2,"op":"snapshot.load","file":"1777925811_links.tree"}
+{"v":2,"op":"snapshot.verify"}
+{"v":2,"op":"snapshot.info"}
 ```
 
-### load
+### system
 
-Load one snapshot file from the configured directory. The file name is passed in
-`tree_name` for backwards compatibility.
+Runtime and operational commands:
 
 ```json
-{"command":"load","tree_name":"1777925811_links.tree"}
+{"v":2,"op":"system.health"}
+{"v":2,"op":"system.stats"}
+{"v":2,"op":"system.metrics"}
+{"v":2,"op":"system.compact"}
 ```
 
-### health
+### Legacy v1
 
-Return service health and uptime.
+Legacy clients can continue to use v1 `command` requests:
 
 ```json
-{"command":"health"}
+{"command":"increment","tree_name":"links","key":42}
+{"command":"sum","tree_name":"links","key":42}
 ```
 
-### stats
+These requests return `protocol_version: 1`. New clients should use v2.
 
-Return runtime stats: uptime, tree count, key count, dump count, WAL state, heap
-size, command count, error count, and command latency.
-
-```json
-{"command":"stats"}
-```
-
-### metrics
-
-Return Prometheus-style metrics text.
-
-```json
-{"command":"metrics"}
-```
+## Metrics
 
 Metrics include:
 
@@ -418,24 +485,24 @@ Metrics include:
 * `karma_memory_bytes`
 * `karma_commands_total`
 * `karma_errors_total`
+* `karma_protocol_v1_requests_total`
 * `karma_command_latency_ms`
 * `karma_command_latency_ms_average`
-
-### verify
-
-Verify that snapshots and WAL can be restored.
-
-```json
-{"command":"verify"}
-```
+* `karma_ingest_active_streams`
+* `karma_ingest_chunks_applied_total`
+* `karma_ingest_chunks_skipped_total`
+* `karma_ingest_chunks_rejected_total`
+* `karma_ingest_items_applied_total`
+* `karma_ingest_chunk_latency_ms`
+* `karma_ingest_chunk_latency_ms_average`
 
 ## Examples
 
 Using `nc`:
 
 ```sh
-printf '{"command":"increment","tree_name":"links","key":42}\n' | nc 127.0.0.1 8080
-printf '{"command":"sum","tree_name":"links","key":42}\n' | nc 127.0.0.1 8080
+printf '{"v":2,"op":"counter.increment","series":"links","key":42,"value":1}\n' | nc 127.0.0.1 8080
+printf '{"v":2,"op":"counter.sum","series":"links","key":42}\n' | nc 127.0.0.1 8080
 ```
 
 Using Crystal:
@@ -445,7 +512,7 @@ require "json"
 require "socket"
 
 socket = TCPSocket.new("127.0.0.1", 8080)
-socket << {command: "increment", tree_name: "links", key: 42_u64}.to_json << "\n"
+socket << {v: 2, op: "counter.increment", series: "links", key: 42_u64, value: 1_u64}.to_json << "\n"
 puts socket.gets
 socket.close
 ```
@@ -457,7 +524,7 @@ require "json"
 require "socket"
 
 socket = TCPSocket.new("127.0.0.1", 8080)
-socket.write({command: "sum", tree_name: "links", key: 42}.to_json + "\n")
+socket.write({v: 2, op: "counter.sum", series: "links", key: 42}.to_json + "\n")
 puts socket.gets
 socket.close
 ```
@@ -474,7 +541,7 @@ Startup with `--restore=true`:
 1. Load the latest snapshot per tree.
 2. Replay WAL entries.
 
-`dump_all`:
+`snapshot.create_all` / legacy `dump_all`:
 
 1. Writes atomic snapshots through a temporary file and rename.
 2. Fsyncs snapshot files before rename.
@@ -518,8 +585,8 @@ changes can be developed and tested inside this repository.
 ## Clients
 
 Karma's protocol is simple JSON over TCP. Existing higher-level clients may need
-updates to support protocol version `1` responses, auth tokens, and operational
-commands.
+updates to emit v2 request envelopes, handle protocol version `2` responses,
+send auth tokens, and use the newer operational commands.
 
 ## License
 

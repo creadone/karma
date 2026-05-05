@@ -37,6 +37,10 @@ module Karma
         Karma.config.max_request_bytes = bytes.to_i32
       end
 
+      parser.on("--max-response-bytes=bytes", "Maximum response size; 0 disables the limit (default: #{Karma.config.max_response_bytes})") do |bytes|
+        Karma.config.max_response_bytes = bytes.to_i32
+      end
+
       parser.on("--read-timeout=seconds", "Client read timeout in seconds (default: #{Karma.config.read_timeout_seconds})") do |seconds|
         Karma.config.read_timeout_seconds = seconds.to_i32
       end

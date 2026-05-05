@@ -4,8 +4,15 @@ module Karma
     METRICS_MUTEX = Mutex.new
     @@command_count = 0_i64
     @@error_count = 0_i64
+    @@legacy_request_count = 0_i64
     @@total_latency_ms = 0.0
     @@last_latency_ms = 0.0
+
+    def self.record_legacy_request : Nil
+      METRICS_MUTEX.synchronize do
+        @@legacy_request_count += 1
+      end
+    end
 
     def self.record_command(success : Bool, latency_ms : Float64) : Nil
       METRICS_MUTEX.synchronize do
@@ -27,24 +34,25 @@ module Karma
     def self.stats(cluster : Cluster)
       ingest_metrics = Karma::Ingest.metrics
       {
-        uptime_seconds:        uptime_seconds,
-        trees:                 cluster.tree_count,
-        keys:                  cluster.key_count,
-        dump_count:            Karma::Backup.dumps(Karma.config.dump_dir).size,
-        wal_enabled:           Karma::Wal.enabled?,
-        wal_bytes:             wal_bytes,
-        memory_bytes:          GC.stats.heap_size,
-        command_count:         command_count,
-        error_count:           error_count,
-        latency_ms_avg:        average_latency_ms,
-        latency_ms_last:       last_latency_ms,
-        ingest_active_streams: ingest_metrics[:active_streams],
-        ingest_chunks_applied: ingest_metrics[:chunks_applied],
-        ingest_chunks_skipped: ingest_metrics[:chunks_skipped],
+        uptime_seconds:         uptime_seconds,
+        trees:                  cluster.tree_count,
+        keys:                   cluster.key_count,
+        dump_count:             Karma::Backup.dumps(Karma.config.dump_dir).size,
+        wal_enabled:            Karma::Wal.enabled?,
+        wal_bytes:              wal_bytes,
+        memory_bytes:           GC.stats.heap_size,
+        command_count:          command_count,
+        error_count:            error_count,
+        legacy_request_count:   legacy_request_count,
+        latency_ms_avg:         average_latency_ms,
+        latency_ms_last:        last_latency_ms,
+        ingest_active_streams:  ingest_metrics[:active_streams],
+        ingest_chunks_applied:  ingest_metrics[:chunks_applied],
+        ingest_chunks_skipped:  ingest_metrics[:chunks_skipped],
         ingest_chunks_rejected: ingest_metrics[:chunks_rejected],
-        ingest_items_applied:  ingest_metrics[:items_applied],
+        ingest_items_applied:   ingest_metrics[:items_applied],
         ingest_latency_ms_last: ingest_metrics[:latency_ms_last],
-        ingest_latency_ms_avg: ingest_metrics[:latency_ms_average],
+        ingest_latency_ms_avg:  ingest_metrics[:latency_ms_average],
       }
     end
 
@@ -66,6 +74,8 @@ module Karma
         io << "karma_commands_total #{command_count}\n"
         io << "# TYPE karma_errors_total counter\n"
         io << "karma_errors_total #{error_count}\n"
+        io << "# TYPE karma_protocol_v1_requests_total counter\n"
+        io << "karma_protocol_v1_requests_total #{legacy_request_count}\n"
         io << "# TYPE karma_command_latency_ms gauge\n"
         io << "karma_command_latency_ms #{last_latency_ms}\n"
         io << "# TYPE karma_command_latency_ms_average gauge\n"
@@ -107,6 +117,10 @@ module Karma
 
     private def self.error_count : Int64
       METRICS_MUTEX.synchronize { @@error_count }
+    end
+
+    private def self.legacy_request_count : Int64
+      METRICS_MUTEX.synchronize { @@legacy_request_count }
     end
 
     private def self.last_latency_ms : Float64

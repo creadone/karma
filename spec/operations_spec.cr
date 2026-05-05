@@ -25,6 +25,7 @@ describe "operations commands" do
     parsed["response"]["memory_bytes"].as_i.should be > 0
     parsed["response"]["command_count"].as_i.should be > 0
     parsed["response"]["latency_ms_last"].as_f.should be >= 0.0
+    parsed["response"]["legacy_request_count"].as_i.should be > 0
     parsed["response"]["ingest_active_streams"].as_i.should eq(0)
   end
 
@@ -39,6 +40,7 @@ describe "operations commands" do
     metrics.should contain("karma_memory_bytes")
     metrics.should contain("karma_commands_total")
     metrics.should contain("karma_errors_total")
+    metrics.should contain("karma_protocol_v1_requests_total")
     metrics.should contain("karma_command_latency_ms")
     metrics.should contain("karma_ingest_active_streams")
     metrics.should contain("karma_ingest_chunks_applied_total")
