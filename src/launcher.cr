@@ -1,24 +1,19 @@
 module Karma
   class Launcher
-    def initialize
-      @cluster = uninitialized Karma::Cluster
-      @server = uninitialized Karma::Server
+    def initialize(@runtime : Runtime? = nil)
     end
 
     def run!
-      if Karma.config.restore
-        @cluster = Cluster.restore_with_wal(Karma.config.dump_dir)
-      else
-        @cluster = Cluster.new
-      end
-      @server = Karma::Server.new(@cluster)
+      runtime = @runtime ||= Runtime.build
       Karma::Log.info("server.start", "version=#{Karma::VERSION} port=#{Karma.config.port}")
-      @server.start!
+      runtime.server.start!
     end
 
     def dump_all
+      return unless runtime = @runtime
+
       Karma::State.synchronize do
-        @cluster.dump_all
+        runtime.cluster.dump_all
       end
     end
 
