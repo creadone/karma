@@ -84,6 +84,19 @@ bin/karma \
   --wal-fsync=true
 ```
 
+The same configuration can be provided through environment variables. Command
+line options are applied after environment variables and override them:
+
+```sh
+KARMA_HOST=0.0.0.0 \
+KARMA_PORT=8080 \
+KARMA_DUMP_DIR=/var/lib/karma \
+KARMA_RESTORE=true \
+KARMA_WAL=true \
+KARMA_WAL_FSYNC=true \
+bin/karma
+```
+
 Options:
 
 ```text
@@ -138,6 +151,60 @@ Options:
 ```
 
 Boolean flags use `true` or `false`.
+
+Environment variables:
+
+```text
+KARMA_HOST
+  Same as --bind.
+
+KARMA_PORT
+  Same as --port.
+
+KARMA_DUMP_DIR
+  Same as --directory.
+
+KARMA_RESTORE
+  Same as --restore.
+
+KARMA_TCP_NODELAY
+  Same as --nodelay.
+
+KARMA_WAL
+  Same as --wal.
+
+KARMA_WAL_FSYNC
+  Same as --wal-fsync.
+
+KARMA_MAX_REQUEST_BYTES
+  Same as --max-request-bytes.
+
+KARMA_MAX_RESPONSE_BYTES
+  Same as --max-response-bytes.
+
+KARMA_READ_TIMEOUT_SECONDS
+  Same as --read-timeout.
+
+KARMA_WRITE_TIMEOUT_SECONDS
+  Same as --write-timeout.
+
+KARMA_QUERY_TIMEOUT_MS
+  Same as --query-timeout-ms.
+
+KARMA_AUTH_TOKEN
+  Same as --auth-token. Empty value disables the token.
+
+KARMA_READ_AUTH_TOKEN
+  Same as --read-auth-token. Empty value disables the token.
+
+KARMA_DUMP_RETENTION_PER_TREE
+  Same as --dump-retention-per-tree.
+
+KARMA_LOG
+  Same as --log.
+```
+
+Boolean environment variables also use `true` or `false`.
 
 ## Protocol
 

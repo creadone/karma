@@ -3,6 +3,8 @@ require "option_parser"
 module Karma
   module Cli
     def self.parse!(args = ARGV) : Nil
+      Karma.config.load_env!
+
       parser = OptionParser.new do |parser|
         parser.banner = "Usage: karma [arguments]"
 
@@ -19,19 +21,19 @@ module Karma
         end
 
         parser.on("-r flag", "--restore=flag", "Load last state from dumps (default: #{Karma.config.restore})") do |flag|
-          Karma.config.restore = (flag == "true")
+          Karma.config.restore = bool_flag(flag, "--restore")
         end
 
         parser.on("-n flag", "--nodelay=flag", "Disable Nagle's algorithm (default: #{Karma.config.tcp_nodelay})") do |flag|
-          Karma.config.tcp_nodelay = (flag == "true")
+          Karma.config.tcp_nodelay = bool_flag(flag, "--nodelay")
         end
 
         parser.on("-w flag", "--wal=flag", "Enable write-ahead log (default: #{Karma.config.wal})") do |flag|
-          Karma.config.wal = (flag == "true")
+          Karma.config.wal = bool_flag(flag, "--wal")
         end
 
         parser.on("--wal-fsync=flag", "Fsync write-ahead log entries (default: #{Karma.config.wal_fsync})") do |flag|
-          Karma.config.wal_fsync = (flag == "true")
+          Karma.config.wal_fsync = bool_flag(flag, "--wal-fsync")
         end
 
         parser.on("--max-request-bytes=bytes", "Maximum request line size (default: #{Karma.config.max_request_bytes})") do |bytes|
@@ -67,7 +69,7 @@ module Karma
         end
 
         parser.on("--log=flag", "Enable structured JSON logs (default: #{Karma.config.log})") do |flag|
-          Karma.config.log = (flag == "true")
+          Karma.config.log = bool_flag(flag, "--log")
         end
 
         parser.on("-h", "--help", "Show this help") do
@@ -83,6 +85,17 @@ module Karma
       end
 
       parser.parse(args)
+    end
+
+    private def self.bool_flag(value : String, option : String) : Bool
+      case value
+      when "true"
+        true
+      when "false"
+        false
+      else
+        raise Karma::Error.new("validation_error", "#{option} must be true or false")
+      end
     end
   end
 end
