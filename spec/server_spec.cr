@@ -15,6 +15,15 @@ class FakeClient
   def send(message : String)
     @sent << message
   end
+
+  def <<(message : String)
+    @sent << "" if @sent.empty?
+    @sent[-1] += message
+    self
+  end
+
+  def flush
+  end
 end
 
 describe Karma::Server do

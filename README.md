@@ -653,6 +653,20 @@ manual bootstrap checks. Automated slave bootstrap uses `snapshot.fetch_chunk`
 with bounded chunks. Very large snapshots may still be better served through a
 future object-storage transport.
 
+Operational notes:
+
+* manual failover is supported only as an operator procedure; stop the old
+  master before promoting a slave, and rebuild the remaining slaves from the
+  promoted master;
+* rebuild a slave by starting it with an empty data directory, `--restore=true`,
+  and `--replication-source-host`;
+* alert on sustained `karma_replication_lag_entries`, growing
+  `karma_replication_poll_errors_total`, stale
+  `karma_replication_last_poll_success_unix`, and bootstrap errors.
+
+The detailed Russian runbook is in
+`docs/replication-operations-runbook.md`.
+
 ### Legacy v1
 
 Legacy clients can continue to use v1 `command` requests:
@@ -847,6 +861,24 @@ bin/karma_tcp_load_test \
 ```
 
 For the conservative WAL path, use `--wal-fsync=true`.
+
+Run the master/slave replication load test:
+
+```sh
+shards build --release
+crystal build --release scripts/replication_load_test.cr -o bin/karma_replication_load_test
+bin/karma_replication_load_test \
+  --binary=bin/karma \
+  --clients=4 \
+  --keys=10000 \
+  --batch-size=1000 \
+  --write-batches=100 \
+  --read-rounds=100
+```
+
+The replication test starts a local master and slave, bootstraps the slave from
+master snapshots, writes to the master, reads from the slave, waits for WAL lag
+to reach zero, and verifies that master/slave totals match.
 
 Run CSV reconciliation against ClickHouse/exported aggregates:
 
