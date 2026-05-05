@@ -41,6 +41,10 @@ describe Karma do
 
     files = Dir.glob(File.join(dump_dir, "*.tree"))
     files.size.should be > 0
+    metadata = Karma::Backup.snapshot_metadata(files.first)
+    metadata.tree.should eq("articles")
+    metadata.file.should eq(File.basename(files.first))
+    metadata.last_lsn.should be > 0
   end
 
   it "creates dumps for all trees with DumpAll" do
@@ -59,6 +63,10 @@ describe Karma do
 
     files = Dir.glob(File.join(dump_dir, "*.tree"))
     files.size.should be >= 2
+    files.each do |path|
+      File.exists?(Karma::Backup.metadata_path(path)).should be_true
+      Karma::Backup.snapshot_metadata(path).last_lsn.should be > 0
+    end
   end
 
   it "restores trees with underscores in names" do
@@ -100,5 +108,19 @@ describe Karma do
 
     File.read(dump_path).should eq("existing")
     Dir.glob(File.join(dump_dir, ".*.tmp")).should be_empty
+  end
+
+  it "reads legacy dump metadata when sidecar is missing" do
+    dump_dir = File.expand_path(".spec_dumps_legacy_metadata_#{Time.local.to_unix_ms}")
+    Dir.mkdir_p(dump_dir)
+    dump_path = File.join(dump_dir, "1_articles.tree")
+    File.write(dump_path, "existing")
+
+    metadata = Karma::Backup.snapshot_metadata(dump_path)
+
+    metadata.tree.should eq("articles")
+    metadata.timestamp.should eq(1)
+    metadata.last_lsn.should eq(0_u64)
+    metadata.bytes.should eq(8)
   end
 end

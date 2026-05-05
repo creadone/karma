@@ -7,5 +7,6 @@
 .spec_*/
 *.dwarf
 *.tree
+*.tree.meta.json
 *.wal
 *.lsn

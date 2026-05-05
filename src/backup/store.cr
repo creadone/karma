@@ -32,6 +32,7 @@ module Karma
         end
 
         File.rename(temp_path, file_path)
+        write_metadata(file_path, tree_name, Karma::Wal.current_lsn)
         Karma::Log.info("backup.dump", "tree=#{tree_name} path=#{file_path}")
         true
       else
@@ -51,11 +52,38 @@ module Karma
           paths.sort! { |a, b| dump_timestamp(b) <=> dump_timestamp(a) }
           paths.skip(retain_per_tree).each do |path|
             File.delete(path)
+            metadata_path = metadata_path(path)
+            File.delete(metadata_path) if File.exists?(metadata_path)
             removed += 1
           end
         end
       Karma::Log.info("backup.prune", "removed=#{removed}") if removed > 0
       removed
+    end
+
+    private def self.write_metadata(file_path : String, tree_name : String, last_lsn : UInt64) : Nil
+      metadata_path = metadata_path(file_path)
+      temp_path = File.join(
+        File.dirname(metadata_path),
+        ".#{File.basename(metadata_path)}.#{Process.pid}.#{Random::Secure.hex(8)}.tmp"
+      )
+      metadata = SnapshotMetadata.new(
+        tree_name,
+        File.basename(file_path),
+        dump_timestamp(file_path),
+        last_lsn,
+        File.size(file_path)
+      )
+
+      File.open(temp_path, "w") do |io|
+        metadata.to_json(io)
+        io.puts
+        io.flush
+        io.fsync
+      end
+      File.rename(temp_path, metadata_path)
+    ensure
+      File.delete(temp_path) if temp_path && File.exists?(temp_path)
     end
   end
 end

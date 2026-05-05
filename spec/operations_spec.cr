@@ -222,8 +222,11 @@ describe "operations commands" do
     parsed["protocol_version"].as_i.should eq(2)
     info["dump_count"].as_i.should eq(1)
     info["latest_by_tree"].as_a.first["tree"].as_s.should eq("articles")
+    info["latest_by_tree"].as_a.first["last_lsn"].as_i.should be > 0
+    info["last_snapshot_lsn"].as_i.should be > 0
     info["wal_enabled"].as_bool.should be_true
     info["wal_bytes"].as_i.should eq(0)
+    info["wal_current_lsn"].as_i.should be > 0
   end
 
   it "verifies restorable WAL while command lock is held" do
@@ -260,7 +263,9 @@ describe Karma::Backup do
     Dir.mkdir_p(dump_dir)
 
     3.times do |index|
-      File.write(File.join(dump_dir, "#{index + 1}_articles.tree"), "dump")
+      dump_path = File.join(dump_dir, "#{index + 1}_articles.tree")
+      File.write(dump_path, "dump")
+      File.write(Karma::Backup.metadata_path(dump_path), "metadata")
     end
 
     Karma::Backup.prune(dump_dir, 2).should eq(1)
@@ -268,5 +273,6 @@ describe Karma::Backup do
       "3_articles.tree",
       "2_articles.tree",
     ])
+    File.exists?(Karma::Backup.metadata_path(File.join(dump_dir, "1_articles.tree"))).should be_false
   end
 end

@@ -680,6 +680,11 @@ The current WAL LSN is persisted in `karma.wal.lsn`. WAL replay accepts both
 the LSN envelope and older WAL lines where the command JSON is written directly
 at the top level.
 
+Each new snapshot also gets a sidecar metadata file named
+`<snapshot>.meta.json`. It records the snapshot file, tree, timestamp, size,
+and `last_lsn`, which is the WAL LSN covered by that snapshot. `snapshot.info`
+returns `last_snapshot_lsn` and per-tree `last_lsn` values.
+
 Recovery checkpoint metadata is stored separately in `recovery.json` in the
 same directory. It records external source positions such as ClickHouse export
 ids or durable queue offsets. It is loaded on startup before serving commands.

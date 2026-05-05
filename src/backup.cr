@@ -1,6 +1,7 @@
 module Karma
   module Backup
-    DUMP_EXTENSION = ".tree"
+    DUMP_EXTENSION     = ".tree"
+    METADATA_EXTENSION = ".meta.json"
   end
 end
 
