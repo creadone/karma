@@ -11,6 +11,7 @@ module Karma
 
     def self.stats(cluster : Cluster)
       ingest_metrics = Karma::Ingest.metrics
+      replication = Karma::Replication.status
       {
         uptime_seconds:                     uptime_seconds,
         trees:                              cluster.tree_count,
@@ -20,6 +21,10 @@ module Karma
         wal_enabled:                        Karma::Wal.enabled?,
         wal_bytes:                          wal_bytes,
         wal_current_lsn:                    Karma::Wal.current_lsn,
+        replication_replayed_lsn:           replication[:replayed_lsn],
+        replication_lag_entries:            replication[:lag_entries],
+        replication_entries_applied:        replication[:entries_applied],
+        replication_last_received_unix:     replication[:last_received_unix],
         memory_bytes:                       GC.stats.heap_size,
         command_count:                      command_count,
         error_count:                        error_count,

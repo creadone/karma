@@ -594,6 +594,10 @@ Inspect replication bootstrap state:
 {"v":2,"op":"replication.entries","after_lsn":120,"limit":1000}
 ```
 
+`replication.status` includes `replayed_lsn`, `replication_lag_entries`,
+`replication_entries_applied`, and `replication_last_received_unix`. Slaves use
+`karma.replication.lsn` to persist the last applied master WAL LSN.
+
 ### Legacy v1
 
 Legacy clients can continue to use v1 `command` requests:
@@ -616,6 +620,10 @@ Metrics include:
 * `karma_role`
 * `karma_wal_bytes`
 * `karma_wal_current_lsn`
+* `karma_replication_replayed_lsn`
+* `karma_replication_lag_entries`
+* `karma_replication_entries_applied_total`
+* `karma_replication_last_received_unix`
 * `karma_memory_bytes`
 * `karma_commands_total`
 * `karma_errors_total`

@@ -10,6 +10,7 @@ Spec.before_each do
   end
   Karma::Ingest.reset!
   Karma::Recovery.reset!
+  Karma::Replication.reset!
 end
 
 def parse_response(response : String) : JSON::Any
