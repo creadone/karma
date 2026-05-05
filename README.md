@@ -588,6 +588,14 @@ Last recorded local results from 2026-05-05:
 | `tcp_series.batch_add` | TCP, 4 clients, WAL on, fsync on | 744,551 items/sec | 2.9103 ms |
 | `tcp_counter.batch_sum` | TCP, 4 clients, WAL on, fsync on | 1,708,312 key reads/sec | 1.5604 ms |
 
+Volume sensitivity test, in-process, WAL off, 7 daily buckets per key:
+
+| Keys | Data points | Heap | Snapshot | Batch sum | Batch p95 | Summary | Snapshot | Restore |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10,000 | 70,000 | 8.23 MiB | 0.57 MiB | 2,255,027 key reads/sec | 0.8820 ms | 4.59 ms | 4.59 ms | 2.87 ms |
+| 50,000 | 350,000 | 28.48 MiB | 2.86 MiB | 1,778,740 key reads/sec | 0.4863 ms | 33.41 ms | 20.35 ms | 15.18 ms |
+| 100,000 | 700,000 | 47.70 MiB | 5.79 MiB | 1,558,846 key reads/sec | 0.4809 ms | 88.58 ms | 42.81 ms | 32.21 ms |
+
 Replication load test on the same date used `clients=4`, `keys=10000`,
 `batch_size=1000`, `write_batches=100`, `read_rounds=100`,
 `replication_poll_interval_ms=10`, and `replication_batch_size=1000`.
@@ -610,6 +618,18 @@ bin/karma_tcp_load_test \
   --clients=4 \
   --wal=true \
   --wal-fsync=false
+```
+
+Volume sensitivity test:
+
+```sh
+crystal build --release scripts/volume_load_test.cr -o bin/karma_volume_load_test
+bin/karma_volume_load_test \
+  --sizes=10000,50000,100000 \
+  --bucket-count=7 \
+  --batch-size=1000 \
+  --single-rounds=1000 \
+  --read-rounds=100
 ```
 
 Master/slave replication test:

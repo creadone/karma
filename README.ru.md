@@ -586,7 +586,7 @@ socket.close
 
 Последние зафиксированные локальные результаты от 5 мая 2026:
 
-| Тест | Режим | Производительность | p95 latency |
+| Тест | Режим | Производительность | p95 задержка |
 | --- | --- | ---: | ---: |
 | `single_increment` | внутри процесса, WAL выключен | 289 908 ops/sec | 0.004 ms |
 | `single_sum` | внутри процесса, WAL выключен | 403 080 ops/sec | 0.0026 ms |
@@ -596,6 +596,15 @@ socket.close
 | `tcp_single_sum` | TCP, 4 клиента, WAL включен, fsync включен | 41 340 ops/sec | 0.1339 ms |
 | `tcp_series.batch_add` | TCP, 4 клиента, WAL включен, fsync включен | 744 551 items/sec | 2.9103 ms |
 | `tcp_counter.batch_sum` | TCP, 4 клиента, WAL включен, fsync включен | 1 708 312 key reads/sec | 1.5604 ms |
+
+Тест зависимости от объема данных: внутри процесса, WAL выключен, 7 дневных
+bucket-ов на ключ:
+
+| Ключи | Точек данных | Память | Снимок | Пакетное чтение | p95 пакета | Сводка | Снимок | Восстановление |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10 000 | 70 000 | 8.23 MiB | 0.57 MiB | 2 255 027 key reads/sec | 0.8820 ms | 4.59 ms | 4.59 ms | 2.87 ms |
+| 50 000 | 350 000 | 28.48 MiB | 2.86 MiB | 1 778 740 key reads/sec | 0.4863 ms | 33.41 ms | 20.35 ms | 15.18 ms |
+| 100 000 | 700 000 | 47.70 MiB | 5.79 MiB | 1 558 846 key reads/sec | 0.4809 ms | 88.58 ms | 42.81 ms | 32.21 ms |
 
 Тест репликации в тот же день запускался с `clients=4`, `keys=10000`,
 `batch_size=1000`, `write_batches=100`, `read_rounds=100`,
@@ -619,6 +628,18 @@ bin/karma_tcp_load_test \
   --clients=4 \
   --wal=true \
   --wal-fsync=false
+```
+
+Тест зависимости от объема данных:
+
+```sh
+crystal build --release scripts/volume_load_test.cr -o bin/karma_volume_load_test
+bin/karma_volume_load_test \
+  --sizes=10000,50000,100000 \
+  --bucket-count=7 \
+  --batch-size=1000 \
+  --single-rounds=1000 \
+  --read-rounds=100
 ```
 
 Тест репликации master/slave:
