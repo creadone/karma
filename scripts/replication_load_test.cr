@@ -16,6 +16,7 @@ replication_batch_size = 1_000
 replication_poll_interval_ms = 10
 bootstrap_timeout_seconds = 60
 catchup_timeout_seconds = 30
+max_response_bytes = 64 * 1024 * 1024
 series = "links"
 bucket = 20260505_u64
 wal_fsync = false
@@ -50,6 +51,7 @@ OptionParser.parse do |parser|
   parser.on("--replication-poll-interval-ms=ms", "Slave polling interval (default: #{replication_poll_interval_ms})") { |value| replication_poll_interval_ms = value.to_i }
   parser.on("--bootstrap-timeout-seconds=seconds", "Seconds to wait for slave snapshot bootstrap (default: #{bootstrap_timeout_seconds})") { |value| bootstrap_timeout_seconds = value.to_i }
   parser.on("--catchup-timeout-seconds=seconds", "Seconds to wait for slave WAL catch-up (default: #{catchup_timeout_seconds})") { |value| catchup_timeout_seconds = value.to_i }
+  parser.on("--max-response-bytes=bytes", "Karma max response bytes for both nodes (default: #{max_response_bytes})") { |value| max_response_bytes = value.to_i }
   parser.on("--series=name", "Series name (default: #{series})") { |value| series = value }
   parser.on("--bucket=yyyymmdd", "Bucket date (default: #{bucket})") { |value| bucket = value.to_u64 }
   parser.on("--wal-fsync=flag", "Fsync WAL writes (default: #{wal_fsync})") { |value| wal_fsync = bool_flag(value) }
@@ -72,6 +74,7 @@ raise "replication-batch-size must be greater than 0" unless replication_batch_s
 raise "replication-poll-interval-ms must be greater than 0" unless replication_poll_interval_ms > 0
 raise "bootstrap-timeout-seconds must be greater than 0" unless bootstrap_timeout_seconds > 0
 raise "catchup-timeout-seconds must be greater than 0" unless catchup_timeout_seconds > 0
+raise "max-response-bytes must be greater than 0" unless max_response_bytes > 0
 
 master_dir = File.join(base_dir, "master")
 slave_dir = File.join(base_dir, "slave")
@@ -194,7 +197,7 @@ begin
     "--wal=true",
     "--wal-fsync=#{wal_fsync}",
     "--max-request-bytes=#{64 * 1024 * 1024}",
-    "--max-response-bytes=#{64 * 1024 * 1024}",
+    "--max-response-bytes=#{max_response_bytes}",
     "--read-timeout=30",
     "--write-timeout=30",
     "--query-timeout-ms=0",
@@ -229,7 +232,7 @@ begin
     "--wal=true",
     "--wal-fsync=#{wal_fsync}",
     "--max-request-bytes=#{64 * 1024 * 1024}",
-    "--max-response-bytes=#{64 * 1024 * 1024}",
+    "--max-response-bytes=#{max_response_bytes}",
     "--read-timeout=30",
     "--write-timeout=30",
     "--query-timeout-ms=0",
@@ -334,6 +337,7 @@ begin
     replication_poll_interval_ms: replication_poll_interval_ms,
     bootstrap_timeout_seconds:    bootstrap_timeout_seconds,
     catchup_timeout_seconds:      catchup_timeout_seconds,
+    max_response_bytes:           max_response_bytes,
     wal_fsync:                    wal_fsync,
     master_dir:                   master_dir,
     slave_dir:                    slave_dir,

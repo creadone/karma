@@ -266,11 +266,43 @@ describe "operations commands" do
     parsed["success"].as_bool.should be_true
     response["after_lsn"].as_i.should eq(1)
     response["limit"].as_i.should eq(2)
+    response["byte_limit"].as_i.should be > 0
+    response["entries_bytes"].as_i.should be > 0
+    response["truncated_by_bytes"].as_bool.should be_false
     response["count"].as_i.should eq(2)
     response["source_lsn"].as_i.should eq(3)
     response["next_lsn"].as_i.should eq(3)
     response["entries"].as_a.map { |entry| entry["lsn"].as_i }.should eq([2, 3])
     response["entries"].as_a.first["entry"]["key"].as_i.should eq(42)
+  end
+
+  it "limits replication entries by response byte budget" do
+    dump_dir = File.expand_path(".spec_replication_entries_budget_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.max_response_bytes = 2_400
+    end
+    cluster = Karma::Cluster.new
+
+    10.times do |index|
+      Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: (index + 1).to_u64}.to_json, cluster)
+    end
+
+    parsed = parse_response(Karma::Commands.call({
+      v:         2,
+      op:        "replication.entries",
+      after_lsn: 0_u64,
+      limit:     10,
+    }.to_json, cluster))
+    response = parsed["response"]
+
+    parsed["success"].as_bool.should be_true
+    response["count"].as_i.should be < 10
+    response["count"].as_i.should be > 0
+    response["truncated_by_bytes"].as_bool.should be_true
+    response["next_lsn"].as_i.should eq(response["entries"].as_a.last["lsn"].as_i)
+  ensure
+    Karma.configure { |c| c.max_response_bytes = 1_048_576 }
   end
 
   it "allows read-only token to read replication entries" do

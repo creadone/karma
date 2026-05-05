@@ -55,6 +55,37 @@ describe Karma::Wal do
     entries.first.entry["key"].as_i.should eq(42)
   end
 
+  it "reads WAL entries after LSN with byte budget" do
+    dump_dir = File.expand_path(".spec_wal_entries_budget_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 43_u64}.to_json, cluster)
+
+    first_entry = Karma::Wal.entries_after(0_u64, 1, dump_dir).first
+    page = Karma::Wal.entries_page_after(0_u64, 10, dump_dir, max_bytes: first_entry.response_bytes)
+
+    page.entries.size.should eq(1)
+    page.entries.first.lsn.should eq(1_u64)
+    page.bytes.should eq(first_entry.response_bytes)
+    page.truncated_by_bytes.should be_true
+  end
+
+  it "rejects a single WAL entry that exceeds the byte budget" do
+    dump_dir = File.expand_path(".spec_wal_entries_budget_reject_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    first_entry = Karma::Wal.entries_after(0_u64, 1, dump_dir).first
+
+    expect_raises(Karma::Error, /Single WAL entry/) do
+      Karma::Wal.entries_page_after(0_u64, 10, dump_dir, max_bytes: first_entry.response_bytes - 1)
+    end
+  end
+
   it "skips legacy WAL entries when reading entries after LSN" do
     dump_dir = File.expand_path(".spec_wal_entries_legacy_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }

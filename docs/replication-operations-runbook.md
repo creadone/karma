@@ -119,6 +119,11 @@ Failover только ручной.
 нужно откалибровать по локальному `scripts/replication_load_test.cr` и реальному
 write profile.
 
+`replication.entries` ограничен не только количеством WAL entries, но и byte
+budget-ом от `max_response_bytes`. Если page обрезан по размеру, master вернет
+`truncated_by_bytes: true`; slave продолжит со следующего `next_lsn` на
+следующем poll-е.
+
 ## Диагностика
 
 Минимальный набор команд:
@@ -175,6 +180,9 @@ bin/karma_replication_load_test \
   --replication-poll-interval-ms=10 \
   --replication-batch-size=1000
 ```
+
+Чтобы проверить дробление `replication.entries` по размеру response, можно
+добавить `--max-response-bytes=524288`.
 
 Тест поднимает два процесса:
 

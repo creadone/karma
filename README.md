@@ -630,6 +630,9 @@ Inspect replication bootstrap state:
 `replication.status` includes `replayed_lsn`, `replication_lag_entries`,
 `replication_entries_applied`, and `replication_last_received_unix`. Slaves use
 `karma.replication.lsn` to persist the last applied master WAL LSN.
+`replication.entries` is bounded by both `limit` and the master's
+`max_response_bytes`; when the byte budget cuts the page, the response includes
+`truncated_by_bytes: true` and `next_lsn` points to the last returned entry.
 
 Start a polling slave:
 
