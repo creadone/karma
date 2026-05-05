@@ -3,18 +3,20 @@ module Karma
     module Delete
 
       def self.call(directive, cluster)
-        name = directive.tree_name.not_nil!
-        cluster.pick(name) do |tree|
+        series = directive.series
+        range = directive.bucket_range
+        cluster.pick(series.name) do |tree|
           unless directive.key.nil?
+            key = directive.series_key
             return tree.delete(
-              directive.key.as(UInt64),
-              directive.time_from.as(UInt64),
-              directive.time_to.as(UInt64)
+              key.value,
+              range.from.value,
+              range.to.value
             )
           else
             return tree.delete(
-              directive.time_from.as(UInt64),
-              directive.time_to.as(UInt64)
+              range.from.value,
+              range.to.value
             )
           end
         end

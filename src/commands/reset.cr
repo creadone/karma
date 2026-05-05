@@ -3,10 +3,11 @@ module Karma
     module Reset
 
       def self.call(directive, cluster)
-        name = directive.tree_name.not_nil!
-        cluster.pick(name) do |tree|
+        series = directive.series
+        cluster.pick(series.name) do |tree|
           unless directive.key.nil?
-            return "OK" if tree.reset(directive.key.as(UInt64))
+            key = directive.series_key
+            return "OK" if tree.reset(key.value)
           else
             return "OK" if tree.reset
           end

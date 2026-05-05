@@ -14,6 +14,7 @@ module Karma
     property write_timeout_seconds : Int32 = 5
     property dump_retention_per_tree : Int32 = 5
     property auth_token : String?
+    property read_auth_token : String?
     property log : Bool = true
   end
 

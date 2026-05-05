@@ -21,8 +21,104 @@ module Karma
 
     def key_count : Int32
       @trees.values.sum do |tree|
-        tree.branches.sum { |branch| branch.size }
+        tree.key_count
       end
+    end
+
+    def tree_info(name : String)
+      tree = get(name)
+      {
+        tree:        name,
+        key_count:   tree.key_count,
+        bucket_count: tree.bucket_count,
+        total:       tree.total_sum,
+        branches:    tree.branches_num,
+      }
+    end
+
+    def tree_keys(name : String, limit : Int32, cursor : UInt64?)
+      tree = get(name)
+      keys = [] of UInt64
+      tree.each_counter do |key, _|
+        next if cursor && key <= cursor
+        keys << key
+      end
+
+      keys.sort!
+      page = keys.first(limit)
+      has_more = keys.size > page.size
+      {
+        tree:        name,
+        limit:       limit,
+        cursor:      cursor,
+        next_cursor: has_more && page.size > 0 ? page.last : nil,
+        keys:        page.map { |key| {key: key, total: tree.sum(key)} },
+      }
+    end
+
+    def tree_summary(name : String, range : Karma::TimeSeries::BucketRange?)
+      tree = get(name)
+      if range
+        active_keys = 0
+        bucket_count = 0
+        total = 0_u64
+        tree.each_counter do |_, counter|
+          counter_total = counter.sum(range.from.value, range.to.value)
+          if counter_total > 0_u64
+            active_keys += 1
+            total += counter_total
+            bucket_count += counter.find(range.from.value, range.to.value).size
+          end
+        end
+
+        {
+          tree:         name,
+          range_from:   range.from.value,
+          range_to:     range.to.value,
+          total:        total,
+          active_keys:  active_keys,
+          bucket_count: bucket_count,
+        }
+      else
+        {
+          tree:         name,
+          total:        tree.total_sum,
+          active_keys:  tree.key_count,
+          bucket_count: tree.bucket_count,
+        }
+      end
+    end
+
+    def tree_top(name : String, limit : Int32, range : Karma::TimeSeries::BucketRange?)
+      tree = get(name)
+      items = [] of NamedTuple(key: UInt64, value: UInt64)
+      tree.each_counter do |key, counter|
+        value = range ? counter.sum(range.from.value, range.to.value) : counter.sum
+        items << {key: key, value: value} if value > 0_u64
+      end
+
+      items.sort! do |left, right|
+        by_value = right[:value] <=> left[:value]
+        by_value == 0 ? left[:key] <=> right[:key] : by_value
+      end
+
+      {
+        tree:  name,
+        limit: limit,
+        items: items.first(limit),
+      }
+    end
+
+    def validate! : Bool
+      each_tree do |name, tree|
+        begin
+          tree.validate!
+        rescue ex
+          raise Karma::Error.new("validation_error", "Tree \"#{name}\" failed validation: #{ex.message}")
+        end
+      end
+
+      true
     end
 
     def create(name : String) : CounterTree::Tree
@@ -47,6 +143,21 @@ module Karma
 
     def load(name : String, io : Slice(UInt8)) : Bool
       @trees[name] = CounterTree.load(io)
+      true
+    end
+
+    def delete_before(name : String, date : UInt64) : Bool
+      get(name).delete_before(date)
+    end
+
+    def compact(name : String) : Bool
+      get(name).compact!
+    end
+
+    def compact : Bool
+      each_tree do |_, tree|
+        tree.compact!
+      end
       true
     end
 

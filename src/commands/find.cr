@@ -2,19 +2,21 @@ module Karma
   module Commands
     module Find
       def self.call(directive, cluster)
-        name = directive.tree_name.not_nil!
-        tree = cluster.get(name)
+        series = directive.series
+        range = directive.bucket_range
+        tree = cluster.get(series.name)
 
         unless directive.key.nil?
+          key = directive.series_key
           return tree.find(
-            directive.key.as(UInt64),
-            directive.time_from.as(UInt64),
-            directive.time_to.as(UInt64)
+            key.value,
+            range.from.value,
+            range.to.value
           )
         else
           return tree.find(
-            directive.time_from.as(UInt64),
-            directive.time_to.as(UInt64)
+            range.from.value,
+            range.to.value
           )
         end
       end

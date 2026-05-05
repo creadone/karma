@@ -119,6 +119,9 @@ Options:
 --auth-token=token
   Require every client command to include the same token field.
 
+--read-auth-token=token
+  Allow the token field to authorize read-only commands only.
+
 --dump-retention-per-tree=count
   Number of snapshots to keep per tree after dump_all. Default: 5
 
@@ -162,6 +165,7 @@ Stable error codes:
 * `validation_error`
 * `not_found`
 * `unauthorized`
+* `forbidden`
 * `request_too_large`
 * `internal_error`
 
@@ -170,6 +174,11 @@ If `--auth-token` is configured, include `token` in every client request:
 ```json
 {"command":"ping","token":"secret"}
 ```
+
+If `--read-auth-token` is configured, that token can execute read-only
+commands such as `ping`, `trees`, `sum`, `find`, `stats`, `metrics`,
+`tree.info`, `tree.keys`, `tree.summary`, `tree.top` and `snapshot.info`.
+Mutating or admin commands return `forbidden` for a read-only token.
 
 Tokens are not written to WAL.
 

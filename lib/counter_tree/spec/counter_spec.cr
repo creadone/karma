@@ -19,6 +19,29 @@ describe CounterTree do
     result.should eq(5_u64)
   end
 
+  it "increments an explicit date by value" do
+    counter.reset
+    counter.increment(20230201_u64, 5_u64).should eq(5_u64)
+    counter.table[20230201_u64].should eq(5_u64)
+    counter.sum.should eq(5_u64)
+  end
+
+  it "decrements an explicit date by value" do
+    counter.reset
+    counter.increment(20230201_u64, 5_u64)
+    counter.decrement(20230201_u64, 2_u64).should eq(2_u64)
+    counter.table[20230201_u64].should eq(3_u64)
+    counter.sum.should eq(3_u64)
+  end
+
+  it "removes zero buckets after decrement" do
+    counter.reset
+    counter.insert(20230201_u64, 5_u64)
+    counter.remove(20230201_u64, 5_u64)
+    counter.table.has_key?(20230201_u64).should be_false
+    counter.sum.should eq(0_u64)
+  end
+
   it "should return removed value" do
     timestamp = Time.local.to_unix_ms.to_u64
     result = counter.insert(timestamp, 5_u64)
@@ -58,6 +81,28 @@ describe CounterTree do
     counter.remove(20230202, 1_u64)
     counter.sum.should eq(5_u64)
     counter.sum.should eq(counter.table.values.sum)
+  end
+
+  it "deletes buckets before a date" do
+    counter.reset
+    timestamps.each { |t| counter.insert(t.to_u64, 1_u64) }
+    counter.delete_before(20230203_u64)
+    counter.table.should eq({20230203_u64 => 1_u64, 20230204_u64 => 1_u64, 20230205_u64 => 1_u64})
+  end
+
+  it "validates consistent counters" do
+    counter.reset
+    counter.insert(20230201_u64, 5_u64)
+    counter.valid?.should be_true
+    counter.validate!.should be_true
+  end
+
+  it "raises on UInt64 overflow" do
+    counter.reset
+    counter.insert(20230201_u64, UInt64::MAX)
+    expect_raises(OverflowError) do
+      counter.insert(20230201_u64, 1_u64)
+    end
   end
 
   it "should return sum" do

@@ -25,18 +25,26 @@ module Karma
     end
 
     def self.stats(cluster : Cluster)
+      ingest_metrics = Karma::Ingest.metrics
       {
-        uptime_seconds:  uptime_seconds,
-        trees:           cluster.tree_count,
-        keys:            cluster.key_count,
-        dump_count:      Karma::Backup.dumps(Karma.config.dump_dir).size,
-        wal_enabled:     Karma::Wal.enabled?,
-        wal_bytes:       wal_bytes,
-        memory_bytes:    GC.stats.heap_size,
-        command_count:   command_count,
-        error_count:     error_count,
-        latency_ms_avg:  average_latency_ms,
-        latency_ms_last: last_latency_ms,
+        uptime_seconds:        uptime_seconds,
+        trees:                 cluster.tree_count,
+        keys:                  cluster.key_count,
+        dump_count:            Karma::Backup.dumps(Karma.config.dump_dir).size,
+        wal_enabled:           Karma::Wal.enabled?,
+        wal_bytes:             wal_bytes,
+        memory_bytes:          GC.stats.heap_size,
+        command_count:         command_count,
+        error_count:           error_count,
+        latency_ms_avg:        average_latency_ms,
+        latency_ms_last:       last_latency_ms,
+        ingest_active_streams: ingest_metrics[:active_streams],
+        ingest_chunks_applied: ingest_metrics[:chunks_applied],
+        ingest_chunks_skipped: ingest_metrics[:chunks_skipped],
+        ingest_chunks_rejected: ingest_metrics[:chunks_rejected],
+        ingest_items_applied:  ingest_metrics[:items_applied],
+        ingest_latency_ms_last: ingest_metrics[:latency_ms_last],
+        ingest_latency_ms_avg: ingest_metrics[:latency_ms_average],
       }
     end
 
@@ -62,6 +70,21 @@ module Karma
         io << "karma_command_latency_ms #{last_latency_ms}\n"
         io << "# TYPE karma_command_latency_ms_average gauge\n"
         io << "karma_command_latency_ms_average #{average_latency_ms}\n"
+        ingest_metrics = Karma::Ingest.metrics
+        io << "# TYPE karma_ingest_active_streams gauge\n"
+        io << "karma_ingest_active_streams #{ingest_metrics[:active_streams]}\n"
+        io << "# TYPE karma_ingest_chunks_applied_total counter\n"
+        io << "karma_ingest_chunks_applied_total #{ingest_metrics[:chunks_applied]}\n"
+        io << "# TYPE karma_ingest_chunks_skipped_total counter\n"
+        io << "karma_ingest_chunks_skipped_total #{ingest_metrics[:chunks_skipped]}\n"
+        io << "# TYPE karma_ingest_chunks_rejected_total counter\n"
+        io << "karma_ingest_chunks_rejected_total #{ingest_metrics[:chunks_rejected]}\n"
+        io << "# TYPE karma_ingest_items_applied_total counter\n"
+        io << "karma_ingest_items_applied_total #{ingest_metrics[:items_applied]}\n"
+        io << "# TYPE karma_ingest_chunk_latency_ms gauge\n"
+        io << "karma_ingest_chunk_latency_ms #{ingest_metrics[:latency_ms_last]}\n"
+        io << "# TYPE karma_ingest_chunk_latency_ms_average gauge\n"
+        io << "karma_ingest_chunk_latency_ms_average #{ingest_metrics[:latency_ms_average]}\n"
       end
     end
 

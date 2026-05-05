@@ -11,16 +11,26 @@ module CounterTree
     end
 
     def increment : UInt64
-      insert(key = timestamp, value : UInt64 = 1)
+      increment(timestamp)
+    end
+
+    def increment(date : UInt64, value : UInt64 = 1_u64) : UInt64
+      insert(date, value)
     end
 
     def decrement : UInt64
-      remove(key = timestamp, value : UInt64 = 1)
+      decrement(timestamp)
+    end
+
+    def decrement(date : UInt64, value : UInt64 = 1_u64) : UInt64
+      remove(date, value)
     end
 
     def insert(key : UInt64, value : UInt64) : UInt64
+      return value if value == 0_u64
+
       if @table.has_key?(key)
-        @table[key] += value
+        @table[key] = checked_add(@table[key], value)
       else
         @table[key] = value
       end
@@ -29,13 +39,20 @@ module CounterTree
     end
 
     def remove(key : UInt64, value : UInt64) : UInt64
+      return value if value == 0_u64
+
       if current_value = @table[key]?
         removed_value = current_value >= value ? value : current_value
 
         if current_value >= value
-          @table[key] = current_value - value
+          new_value = current_value - value
+          if new_value == 0_u64
+            @table.delete(key)
+          else
+            @table[key] = new_value
+          end
         else
-          @table[key] = 0_u64
+          @table.delete(key)
         end
 
         decrement_total(removed_value)
@@ -57,12 +74,46 @@ module CounterTree
       @table.each do |key, val|
         if key >= time_from && key <= time_to
           keys_to_delete << key
-          removed_total += val
+          removed_total = checked_add(removed_total, val)
         end
       end
 
       keys_to_delete.each { |key| @table.delete(key) }
       decrement_total(removed_total)
+
+      true
+    end
+
+    def delete_before(date : UInt64) : Bool
+      delete(0_u64, date - 1_u64) unless date == 0_u64
+      true
+    end
+
+    def keep_from(date : UInt64) : Bool
+      delete_before(date)
+    end
+
+    def compact! : Bool
+      keys_to_delete = [] of UInt64
+      @table.each do |key, value|
+        keys_to_delete << key if value == 0_u64
+      end
+      keys_to_delete.each { |key| @table.delete(key) }
+      @total = @table.values.sum(0_u64)
+      true
+    end
+
+    def valid? : Bool
+      validate!
+      true
+    rescue
+      false
+    end
+
+    def validate! : Bool
+      expected_total = @table.values.sum(0_u64)
+      raise ArgumentError.new("counter total mismatch") unless @total == expected_total
+      raise ArgumentError.new("counter contains zero bucket") if @table.any? { |_, value| value == 0_u64 }
 
       true
     end
@@ -82,7 +133,7 @@ module CounterTree
     end
 
     private def increment_total(value : UInt64) : UInt64
-      @total = @total + value
+      @total = checked_add(@total, value)
     end
 
     private def decrement_total(value : UInt64) : UInt64
@@ -95,6 +146,12 @@ module CounterTree
 
     private def timestamp : UInt64
       Time.local.to_s("%Y%m%d").to_u64
+    end
+
+    private def checked_add(left : UInt64, right : UInt64) : UInt64
+      raise OverflowError.new("counter overflow") if UInt64::MAX - left < right
+
+      left + right
     end
   end
 end

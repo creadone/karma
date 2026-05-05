@@ -49,6 +49,10 @@ module Karma
         Karma.config.auth_token = token
       end
 
+      parser.on("--read-auth-token=token", "Allow token field to authorize read-only commands") do |token|
+        Karma.config.read_auth_token = token
+      end
+
       parser.on("--dump-retention-per-tree=count", "Dumps to keep per tree after dump_all (default: #{Karma.config.dump_retention_per_tree})") do |count|
         Karma.config.dump_retention_per_tree = count.to_i32
       end

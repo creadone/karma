@@ -2,17 +2,19 @@ module Karma
   module Commands
     module Sum
       def self.call(directive, cluster)
-        name = directive.tree_name.not_nil!
-        tree = cluster.get(name)
+        series = directive.series
+        key = directive.series_key
+        tree = cluster.get(series.name)
 
         unless directive.time_from.nil? && directive.time_to.nil?
+          range = directive.bucket_range
           return tree.sum(
-            directive.key.as(UInt64),
-            directive.time_from.as(UInt64),
-            directive.time_to.as(UInt64)
+            key.value,
+            range.from.value,
+            range.to.value
           )
         else
-          return tree.sum(directive.key.as(UInt64))
+          return tree.sum(key.value)
         end
       end
     end

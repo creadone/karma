@@ -12,10 +12,10 @@ module Karma
   module Protocol
     VERSION = 1_u32
 
-    def self.success(response) : String
+    def self.success(response, version = VERSION) : String
       JSON.build do |json|
         json.object do
-          json.field "protocol_version", VERSION
+          json.field "protocol_version", version
           json.field "success", true
           json.field "response" do
             response.to_json(json)
@@ -25,10 +25,10 @@ module Karma
       end
     end
 
-    def self.error(code : String, message : String) : String
+    def self.error(code : String, message : String, version = VERSION) : String
       JSON.build do |json|
         json.object do
-          json.field "protocol_version", VERSION
+          json.field "protocol_version", version
           json.field "success", false
           json.field "response", message
           json.field "error_code", code
