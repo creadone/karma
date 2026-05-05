@@ -563,6 +563,12 @@ Runtime and operational commands:
 {"v":2,"op":"system.compact"}
 ```
 
+Report reconciliation results from external checks:
+
+```json
+{"v":2,"op":"reconciliation.report","checked_points":1000,"mismatch_count":2,"absolute_drift":15,"max_abs_delta":10}
+```
+
 ### Legacy v1
 
 Legacy clients can continue to use v1 `command` requests:
@@ -594,6 +600,15 @@ Metrics include:
 * `karma_batch_write_items_total`
 * `karma_retention_operations_total`
 * `karma_compactions_total`
+* `karma_reconciliation_runs_total`
+* `karma_reconciliation_checked_points_total`
+* `karma_reconciliation_mismatches_total`
+* `karma_reconciliation_absolute_drift_total`
+* `karma_reconciliation_last_run_unix`
+* `karma_reconciliation_last_checked_points`
+* `karma_reconciliation_last_mismatches`
+* `karma_reconciliation_last_absolute_drift`
+* `karma_reconciliation_last_max_abs_delta`
 * `karma_command_latency_ms`
 * `karma_command_latency_ms_average`
 * `karma_ingest_active_streams`
@@ -710,7 +725,8 @@ crystal run scripts/reconcile_csv.cr -- \
   --host=127.0.0.1 \
   --port=8080 \
   --series=links \
-  --csv=clickhouse-links.csv
+  --csv=clickhouse-links.csv \
+  --report
 ```
 
 ## Development

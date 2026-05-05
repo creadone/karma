@@ -45,6 +45,24 @@ module Karma
         raise Karma::Error.new("validation_error", "Field chunk_seq is required")
     end
 
+    private def self.checked_points_from(object : Hash(String, JSON::Any)) : Int64
+      object["checked_points"]?.try(&.as_i64) ||
+        raise Karma::Error.new("validation_error", "Field checked_points is required")
+    end
+
+    private def self.mismatch_count_from(object : Hash(String, JSON::Any)) : Int64
+      object["mismatch_count"]?.try(&.as_i64) ||
+        raise Karma::Error.new("validation_error", "Field mismatch_count is required")
+    end
+
+    private def self.absolute_drift_from(object : Hash(String, JSON::Any)) : Int64
+      object["absolute_drift"]?.try(&.as_i64) || 0_i64
+    end
+
+    private def self.max_abs_delta_from(object : Hash(String, JSON::Any)) : Int64
+      object["max_abs_delta"]?.try(&.as_i64) || 0_i64
+    end
+
     private def self.granularity_from(object : Hash(String, JSON::Any)) : String?
       object["granularity"]?.try(&.as_s?)
     end

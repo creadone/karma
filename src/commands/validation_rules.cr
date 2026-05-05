@@ -72,6 +72,18 @@ module Karma
       require_items(directive, allow_zero: stream.mode != "add")
     end
 
+    private def self.require_reconciliation_report(directive : Directive) : Nil
+      checked_points = directive.checked_points
+      mismatch_count = directive.mismatch_count
+      raise Karma::Error.new("validation_error", "Field checked_points is required") if checked_points.nil?
+      raise Karma::Error.new("validation_error", "Field mismatch_count is required") if mismatch_count.nil?
+      raise Karma::Error.new("validation_error", "Field checked_points must be greater than or equal to 0") if checked_points < 0
+      raise Karma::Error.new("validation_error", "Field mismatch_count must be greater than or equal to 0") if mismatch_count < 0
+      raise Karma::Error.new("validation_error", "Field mismatch_count must be less than or equal to checked_points") if mismatch_count > checked_points
+      raise Karma::Error.new("validation_error", "Field absolute_drift must be greater than or equal to 0") if (directive.absolute_drift || 0_i64) < 0
+      raise Karma::Error.new("validation_error", "Field max_abs_delta must be greater than or equal to 0") if (directive.max_abs_delta || 0_i64) < 0
+    end
+
     private def self.require_positive_value(directive : Directive) : Nil
       return if directive.value.as(UInt64) > 0_u64
 

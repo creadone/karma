@@ -12,6 +12,15 @@ module Karma
     @@batch_write_item_count = 0_i64
     @@retention_count = 0_i64
     @@compact_count = 0_i64
+    @@reconciliation_run_count = 0_i64
+    @@reconciliation_checked_points = 0_i64
+    @@reconciliation_mismatch_count = 0_i64
+    @@reconciliation_absolute_drift = 0_i64
+    @@reconciliation_last_run_unix = 0_i64
+    @@reconciliation_last_checked_points = 0_i64
+    @@reconciliation_last_mismatch_count = 0_i64
+    @@reconciliation_last_absolute_drift = 0_i64
+    @@reconciliation_last_max_abs_delta = 0_i64
     @@total_latency_ms = 0.0
     @@last_latency_ms = 0.0
 
@@ -50,6 +59,20 @@ module Karma
     def self.record_compact : Nil
       METRICS_MUTEX.synchronize do
         @@compact_count += 1
+      end
+    end
+
+    def self.record_reconciliation(checked_points : Int64, mismatch_count : Int64, absolute_drift : Int64, max_abs_delta : Int64) : Nil
+      METRICS_MUTEX.synchronize do
+        @@reconciliation_run_count += 1
+        @@reconciliation_checked_points += checked_points
+        @@reconciliation_mismatch_count += mismatch_count
+        @@reconciliation_absolute_drift += absolute_drift
+        @@reconciliation_last_run_unix = Time.utc.to_unix
+        @@reconciliation_last_checked_points = checked_points
+        @@reconciliation_last_mismatch_count = mismatch_count
+        @@reconciliation_last_absolute_drift = absolute_drift
+        @@reconciliation_last_max_abs_delta = max_abs_delta
       end
     end
 
@@ -109,6 +132,42 @@ module Karma
 
     private def self.compact_count : Int64
       METRICS_MUTEX.synchronize { @@compact_count }
+    end
+
+    private def self.reconciliation_run_count : Int64
+      METRICS_MUTEX.synchronize { @@reconciliation_run_count }
+    end
+
+    private def self.reconciliation_checked_points : Int64
+      METRICS_MUTEX.synchronize { @@reconciliation_checked_points }
+    end
+
+    private def self.reconciliation_mismatch_count : Int64
+      METRICS_MUTEX.synchronize { @@reconciliation_mismatch_count }
+    end
+
+    private def self.reconciliation_absolute_drift : Int64
+      METRICS_MUTEX.synchronize { @@reconciliation_absolute_drift }
+    end
+
+    private def self.reconciliation_last_run_unix : Int64
+      METRICS_MUTEX.synchronize { @@reconciliation_last_run_unix }
+    end
+
+    private def self.reconciliation_last_checked_points : Int64
+      METRICS_MUTEX.synchronize { @@reconciliation_last_checked_points }
+    end
+
+    private def self.reconciliation_last_mismatch_count : Int64
+      METRICS_MUTEX.synchronize { @@reconciliation_last_mismatch_count }
+    end
+
+    private def self.reconciliation_last_absolute_drift : Int64
+      METRICS_MUTEX.synchronize { @@reconciliation_last_absolute_drift }
+    end
+
+    private def self.reconciliation_last_max_abs_delta : Int64
+      METRICS_MUTEX.synchronize { @@reconciliation_last_max_abs_delta }
     end
 
     private def self.last_latency_ms : Float64

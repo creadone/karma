@@ -14,6 +14,8 @@ batch_size = 1_000
 sample_step = 1
 max_mismatches = 20
 json_output = false
+token = ""
+report = false
 
 OptionParser.parse do |parser|
   parser.banner = "Usage: crystal run scripts/reconcile_csv.cr -- --csv=expected.csv --series=links [options]"
@@ -28,6 +30,8 @@ OptionParser.parse do |parser|
   parser.on("--batch-size=count", "Keys per Karma batch_sum request (default: #{batch_size})") { |value| batch_size = value.to_i }
   parser.on("--sample-step=count", "Use every Nth CSV row (default: #{sample_step})") { |value| sample_step = value.to_i }
   parser.on("--max-mismatches=count", "Mismatch examples to print (default: #{max_mismatches})") { |value| max_mismatches = value.to_i }
+  parser.on("--token=token", "Karma auth token for read and optional report requests") { |value| token = value }
+  parser.on("--report", "Send reconciliation.report metrics to Karma after the check") { report = true }
   parser.on("--json", "Print JSON output") { json_output = true }
   parser.on("-h", "--help", "Show this help") do
     puts parser
@@ -93,22 +97,61 @@ def request!(socket : TCPSocket, payload) : JSON::Any
   parsed["response"]
 end
 
+def batch_sum_payload(series : String, keys : Array(UInt64), bucket : UInt64, token : String)
+  if token.empty?
+    {
+      v:      2,
+      op:     "counter.batch_sum",
+      series: series,
+      keys:   keys,
+      range:  {from: bucket, to: bucket},
+    }
+  else
+    {
+      v:      2,
+      op:     "counter.batch_sum",
+      series: series,
+      keys:   keys,
+      range:  {from: bucket, to: bucket},
+      token:  token,
+    }
+  end
+end
+
+def reconciliation_report_payload(checked_points : Int64, mismatch_count : Int64, absolute_drift : Int64, max_abs_delta : Int64, token : String)
+  if token.empty?
+    {
+      v:              2,
+      op:             "reconciliation.report",
+      checked_points: checked_points,
+      mismatch_count: mismatch_count,
+      absolute_drift: absolute_drift,
+      max_abs_delta:  max_abs_delta,
+    }
+  else
+    {
+      v:              2,
+      op:             "reconciliation.report",
+      checked_points: checked_points,
+      mismatch_count: mismatch_count,
+      absolute_drift: absolute_drift,
+      max_abs_delta:  max_abs_delta,
+      token:          token,
+    }
+  end
+end
+
 mismatch_examples = [] of NamedTuple(bucket: UInt64, key: UInt64, expected: UInt64, actual: UInt64, delta: Int128)
 checked_points = 0_i64
 mismatch_count = 0_i64
-absolute_drift = 0_u128
+absolute_drift = 0_i64
+max_abs_delta = 0_i64
 
 socket = TCPSocket.new(host, port)
 begin
   expected.each do |bucket, values_by_key|
     values_by_key.keys.each_slice(batch_size) do |keys|
-      response = request!(socket, {
-        v:      2,
-        op:     "counter.batch_sum",
-        series: series,
-        keys:   keys,
-        range:  {from: bucket, to: bucket},
-      })
+      response = request!(socket, batch_sum_payload(series, keys, bucket, token))
 
       response.as_a.each do |item|
         key = item["key"].as_i64.to_u64
@@ -119,7 +162,9 @@ begin
 
         mismatch_count += 1
         delta = actual.to_i128 - expected_value.to_i128
-        absolute_drift += delta.abs.to_u128
+        delta_abs = delta.abs.to_i64
+        absolute_drift += delta_abs
+        max_abs_delta = delta_abs if delta_abs > max_abs_delta
         if mismatch_examples.size < max_mismatches
           mismatch_examples << {
             bucket:   bucket,
@@ -131,6 +176,10 @@ begin
         end
       end
     end
+  end
+
+  if report
+    request!(socket, reconciliation_report_payload(checked_points, mismatch_count, absolute_drift, max_abs_delta, token))
   end
 ensure
   socket.close unless socket.closed?
@@ -146,6 +195,7 @@ result = {
   checked_points:    checked_points,
   mismatch_count:    mismatch_count,
   absolute_drift:    absolute_drift,
+  max_abs_delta:     max_abs_delta,
   mismatch_examples: mismatch_examples,
   ok:                mismatch_count == 0,
 }

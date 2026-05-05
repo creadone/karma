@@ -138,6 +138,55 @@ describe "operations commands" do
     metrics.should contain("karma_ingest_items_applied_total 1")
   end
 
+  it "records reconciliation report stats and metrics" do
+    cluster = Karma::Cluster.new
+
+    parsed = parse_response(Karma::Commands.call({
+      v:              2,
+      op:             "reconciliation.report",
+      checked_points: 3_i64,
+      mismatch_count: 1_i64,
+      absolute_drift: 7_i64,
+      max_abs_delta:  5_i64,
+    }.to_json, cluster))
+    parsed["protocol_version"].as_i.should eq(2)
+    parsed["success"].as_bool.should be_true
+    parsed["response"].as_s.should eq("OK")
+
+    stats = expect_success(Karma::Commands.call({command: "stats"}.to_json, cluster))["response"]
+    stats["reconciliation_run_count"].as_i.should be >= 1
+    stats["reconciliation_checked_points"].as_i.should be >= 3
+    stats["reconciliation_mismatch_count"].as_i.should be >= 1
+    stats["reconciliation_absolute_drift"].as_i.should be >= 7
+    stats["reconciliation_last_run_unix"].as_i.should be > 0
+    stats["reconciliation_last_checked_points"].as_i.should eq(3)
+    stats["reconciliation_last_mismatch_count"].as_i.should eq(1)
+    stats["reconciliation_last_absolute_drift"].as_i.should eq(7)
+    stats["reconciliation_last_max_abs_delta"].as_i.should eq(5)
+
+    metrics = expect_success(Karma::Commands.call({command: "metrics"}.to_json, cluster))["response"].as_s
+    metrics.should contain("karma_reconciliation_runs_total")
+    metrics.should contain("karma_reconciliation_checked_points_total")
+    metrics.should contain("karma_reconciliation_mismatches_total")
+    metrics.should contain("karma_reconciliation_last_max_abs_delta 5")
+  end
+
+  it "rejects invalid reconciliation reports" do
+    cluster = Karma::Cluster.new
+
+    response = Karma::Commands.call({
+      v:              2,
+      op:             "reconciliation.report",
+      checked_points: 1_i64,
+      mismatch_count: 2_i64,
+    }.to_json, cluster)
+
+    parsed = parse_response(response)
+    parsed["protocol_version"].as_i.should eq(2)
+    parsed["success"].as_bool.should be_false
+    parsed["error_code"].as_s.should eq("validation_error")
+  end
+
   it "verifies restorable dumps" do
     dump_dir = File.expand_path(".spec_verify_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }

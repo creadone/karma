@@ -48,6 +48,8 @@ module Karma
       when "ingest_commit", "ingest_abort"
         require_stream_id(directive)
         Karma::Ingest.validate_stream_exists!(directive.stream_id.not_nil!)
+      when "reconciliation_report"
+        require_reconciliation_report(directive)
       when "find", "delete"
         require_tree_name(directive)
         require_complete_range(directive)

@@ -21,6 +21,10 @@ module Karma
       property granularity : String?
       property limit : Int32?
       property cursor : UInt64?
+      property checked_points : Int64?
+      property mismatch_count : Int64?
+      property absolute_drift : Int64?
+      property max_abs_delta : Int64?
       property protocol_version : UInt32 = 1_u32
 
       def initialize(
@@ -40,6 +44,10 @@ module Karma
         @granularity : String? = nil,
         @limit : Int32? = nil,
         @cursor : UInt64? = nil,
+        @checked_points : Int64? = nil,
+        @mismatch_count : Int64? = nil,
+        @absolute_drift : Int64? = nil,
+        @max_abs_delta : Int64? = nil,
         @protocol_version : UInt32 = 1_u32,
       )
       end
