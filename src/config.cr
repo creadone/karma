@@ -14,6 +14,7 @@ module Karma
     property read_timeout_seconds : Int32 = 5
     property write_timeout_seconds : Int32 = 5
     property query_timeout_ms : Int32 = 1_000
+    property shutdown_timeout_seconds : Int32 = 5
     property dump_retention_per_tree : Int32 = 5
     property auth_token : String?
     property read_auth_token : String?
@@ -32,6 +33,7 @@ module Karma
       @read_timeout_seconds = int_env("KARMA_READ_TIMEOUT_SECONDS", @read_timeout_seconds)
       @write_timeout_seconds = int_env("KARMA_WRITE_TIMEOUT_SECONDS", @write_timeout_seconds)
       @query_timeout_ms = int_env("KARMA_QUERY_TIMEOUT_MS", @query_timeout_ms)
+      @shutdown_timeout_seconds = int_env("KARMA_SHUTDOWN_TIMEOUT_SECONDS", @shutdown_timeout_seconds)
       @dump_retention_per_tree = int_env("KARMA_DUMP_RETENTION_PER_TREE", @dump_retention_per_tree)
       @auth_token = optional_string_env("KARMA_AUTH_TOKEN", @auth_token)
       @read_auth_token = optional_string_env("KARMA_READ_AUTH_TOKEN", @read_auth_token)

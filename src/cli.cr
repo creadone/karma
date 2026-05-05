@@ -56,6 +56,10 @@ module Karma
           Karma.config.query_timeout_ms = ms.to_i32
         end
 
+        parser.on("--shutdown-timeout=seconds", "Seconds to wait for active clients on shutdown (default: #{Karma.config.shutdown_timeout_seconds})") do |seconds|
+          Karma.config.shutdown_timeout_seconds = seconds.to_i32
+        end
+
         parser.on("--auth-token=token", "Require token field in client commands") do |token|
           Karma.config.auth_token = token
         end

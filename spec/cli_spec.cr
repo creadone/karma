@@ -13,6 +13,7 @@ CLI_ENV_KEYS = %w[
   KARMA_READ_TIMEOUT_SECONDS
   KARMA_WRITE_TIMEOUT_SECONDS
   KARMA_QUERY_TIMEOUT_MS
+  KARMA_SHUTDOWN_TIMEOUT_SECONDS
   KARMA_DUMP_RETENTION_PER_TREE
   KARMA_AUTH_TOKEN
   KARMA_READ_AUTH_TOKEN
@@ -38,6 +39,7 @@ describe Karma::Cli do
       c.read_timeout_seconds = 5
       c.write_timeout_seconds = 5
       c.query_timeout_ms = 1_000
+      c.shutdown_timeout_seconds = 5
       c.dump_retention_per_tree = 5
       c.log = false
     end
@@ -55,6 +57,7 @@ describe Karma::Cli do
       "--read-timeout=3",
       "--write-timeout=4",
       "--query-timeout-ms=250",
+      "--shutdown-timeout=6",
       "--dump-retention-per-tree=2",
       "--auth-token=write",
       "--read-auth-token=read",
@@ -73,6 +76,7 @@ describe Karma::Cli do
     Karma.config.read_timeout_seconds.should eq(3)
     Karma.config.write_timeout_seconds.should eq(4)
     Karma.config.query_timeout_ms.should eq(250)
+    Karma.config.shutdown_timeout_seconds.should eq(6)
     Karma.config.dump_retention_per_tree.should eq(2)
     Karma.config.auth_token.should eq("write")
     Karma.config.read_auth_token.should eq("read")
@@ -91,6 +95,7 @@ describe Karma::Cli do
       c.read_timeout_seconds = 5
       c.write_timeout_seconds = 5
       c.query_timeout_ms = 1_000
+      c.shutdown_timeout_seconds = 5
       c.dump_retention_per_tree = 5
       c.auth_token = nil
       c.read_auth_token = nil
@@ -113,6 +118,7 @@ describe Karma::Cli do
       c.read_timeout_seconds = 5
       c.write_timeout_seconds = 5
       c.query_timeout_ms = 1_000
+      c.shutdown_timeout_seconds = 5
       c.dump_retention_per_tree = 5
       c.auth_token = nil
       c.read_auth_token = nil
@@ -131,6 +137,7 @@ describe Karma::Cli do
     ENV["KARMA_READ_TIMEOUT_SECONDS"] = "8"
     ENV["KARMA_WRITE_TIMEOUT_SECONDS"] = "9"
     ENV["KARMA_QUERY_TIMEOUT_MS"] = "300"
+    ENV["KARMA_SHUTDOWN_TIMEOUT_SECONDS"] = "11"
     ENV["KARMA_DUMP_RETENTION_PER_TREE"] = "7"
     ENV["KARMA_AUTH_TOKEN"] = "write-env"
     ENV["KARMA_READ_AUTH_TOKEN"] = "read-env"
@@ -150,6 +157,7 @@ describe Karma::Cli do
     Karma.config.read_timeout_seconds.should eq(8)
     Karma.config.write_timeout_seconds.should eq(9)
     Karma.config.query_timeout_ms.should eq(300)
+    Karma.config.shutdown_timeout_seconds.should eq(11)
     Karma.config.dump_retention_per_tree.should eq(7)
     Karma.config.auth_token.should eq("write-env")
     Karma.config.read_auth_token.should eq("read-env")
@@ -169,6 +177,7 @@ describe Karma::Cli do
       c.read_timeout_seconds = 5
       c.write_timeout_seconds = 5
       c.query_timeout_ms = 1_000
+      c.shutdown_timeout_seconds = 5
       c.dump_retention_per_tree = 5
       c.auth_token = nil
       c.read_auth_token = nil

@@ -137,6 +137,10 @@ Options:
   Tree-level read timeout in milliseconds. Use 0 to disable the limit.
   Default: 1000
 
+--shutdown-timeout=seconds
+  Seconds to wait for active clients on shutdown before closing remaining
+  sockets. Default: 5
+
 --auth-token=token
   Require every client command to include the same token field.
 
@@ -190,6 +194,9 @@ KARMA_WRITE_TIMEOUT_SECONDS
 
 KARMA_QUERY_TIMEOUT_MS
   Same as --query-timeout-ms.
+
+KARMA_SHUTDOWN_TIMEOUT_SECONDS
+  Same as --shutdown-timeout.
 
 KARMA_AUTH_TOKEN
   Same as --auth-token. Empty value disables the token.
