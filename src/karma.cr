@@ -18,7 +18,3 @@ require "./cli"
 require "./signal"
 require "./command"
 require "./launcher"
-
-module Karma
-  LAUNCHER = Launcher.new
-end

@@ -1,14 +1,16 @@
 module Karma
+  module Signals
+    def self.install!(launcher : Launcher) : Nil
+      Signal::INT.trap do
+        spawn launcher.on_shutdown
+        sleep 100.milliseconds
+        exit(-1)
+      end
 
-  Signal::INT.trap do
-    spawn Karma::LAUNCHER.on_shutdown
-    sleep 100.milliseconds
-    exit(-1)
+      Signal::USR1.trap do
+        spawn launcher.dump_all
+        sleep 100.milliseconds
+      end
+    end
   end
-
-  Signal::USR1.trap do
-    spawn Karma::LAUNCHER.dump_all
-    sleep 100.milliseconds
-  end
-
 end
