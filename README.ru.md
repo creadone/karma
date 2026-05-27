@@ -287,10 +287,23 @@ Karma использует JSON поверх TCP: один запрос - одн
 {"v":2,"op":"counter.batch_sum","series":"links","keys":[41,42,43],"range":{"from":20260501,"to":20260505}}
 ```
 
+Прочитать суммы из нескольких series одним запросом:
+
+```json
+{"v":2,"op":"counter.multi_sum","items":[{"series":"links","key":101},{"series":"domains","key":101},{"series":"pixels","key":101}]}
+{"v":2,"op":"counter.multi_sum","range":{"from":20260501,"to":20260531},"items":[{"series":"imports","key":101},{"series":"exports","key":101}]}
+```
+
 Добавить много элементов `[key, bucket, value]`:
 
 ```json
 {"v":2,"op":"series.batch_add","series":"links","items":[[42,20260505,10],[43,20260505,3]]}
+```
+
+Выставить точные элементы `[key, bucket, value]`. Нулевое значение удаляет bucket:
+
+```json
+{"v":2,"op":"series.batch_set","series":"links","items":[[42,20260505,10],[43,20260505,0]]}
 ```
 
 Большие пакетные запросы должны помещаться в `--max-request-bytes`.
@@ -352,6 +365,7 @@ Karma использует JSON поверх TCP: один запрос - одн
 ```json
 {"v":2,"op":"counter.reset","series":"links","key":42}
 {"v":2,"op":"tree.reset","series":"links"}
+{"v":2,"op":"counter.batch_reset","series":"links","keys":[41,42,43]}
 ```
 
 Удалить диапазон дат:
@@ -359,6 +373,7 @@ Karma использует JSON поверх TCP: один запрос - одн
 ```json
 {"v":2,"op":"counter.delete_range","series":"links","key":42,"range":{"from":20260501,"to":20260505}}
 {"v":2,"op":"tree.delete_range","series":"links","range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"counter.batch_delete_range","series":"links","keys":[41,42,43],"range":{"from":20260501,"to":20260505}}
 ```
 
 ### Потоковая загрузка

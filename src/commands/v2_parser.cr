@@ -67,16 +67,26 @@ module Karma
       when "counter.batch_sum", "series.batch_sum"
         range = optional_range_from(object)
         Directive.new("batch_sum", tree_name: tree_or_series(object), keys: keys_from(object), time_from: range.try(&.from.value), time_to: range.try(&.to.value), token: token, protocol_version: 2_u32)
+      when "counter.multi_sum"
+        range = optional_range_from(object)
+        Directive.new("multi_sum", multi_sum_items: multi_sum_items_from(object), time_from: range.try(&.from.value), time_to: range.try(&.to.value), token: token, protocol_version: 2_u32)
+      when "series.batch_set"
+        Directive.new("batch_set", tree_name: tree_or_series(object), items: items_from(object), token: token, protocol_version: 2_u32)
       when "counter.series", "series.points"
         range = range_from(object)
         Directive.new("find", tree_name: tree_or_series(object), key: key_from(object), time_from: range.from.value, time_to: range.to.value, token: token, protocol_version: 2_u32)
       when "counter.delete_range"
         range = range_from(object)
         Directive.new("delete", tree_name: tree_or_series(object), key: key_from(object), time_from: range.from.value, time_to: range.to.value, token: token, protocol_version: 2_u32)
+      when "counter.batch_delete_range"
+        range = range_from(object)
+        Directive.new("batch_delete_range", tree_name: tree_or_series(object), keys: keys_from(object), time_from: range.from.value, time_to: range.to.value, token: token, protocol_version: 2_u32)
       when "series.delete_before", "tree.delete_before"
         Directive.new("delete_before", tree_name: tree_or_series(object), date: before_from(object), token: token, protocol_version: 2_u32)
       when "counter.reset"
         Directive.new("reset", tree_name: tree_or_series(object), key: key_from(object), token: token, protocol_version: 2_u32)
+      when "counter.batch_reset"
+        Directive.new("batch_reset", tree_name: tree_or_series(object), keys: keys_from(object), token: token, protocol_version: 2_u32)
       when "snapshot.create"
         Directive.new("dump", tree_name: tree_or_series(object), token: token, protocol_version: 2_u32)
       when "snapshot.create_all"

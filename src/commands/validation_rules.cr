@@ -36,6 +36,16 @@ module Karma
       end
     end
 
+    private def self.require_multi_sum_items(directive : Directive) : Nil
+      items = directive.multi_sum_items
+      raise Karma::Error.new("validation_error", "Field items is required") if items.nil?
+      raise Karma::Error.new("validation_error", "Field items exceeds max size") if items.size > 10_000
+
+      items.each do |item|
+        raise Karma::Error.new("validation_error", "Field items[].series must not be empty") if item.series.empty?
+      end
+    end
+
     private def self.require_stream_id(directive : Directive) : Nil
       return unless directive.stream_id.nil? || directive.stream_id.to_s.empty?
 

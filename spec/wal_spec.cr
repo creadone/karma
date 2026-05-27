@@ -270,6 +270,46 @@ describe Karma::Wal do
     restored.get("articles").sum(43_u64).should eq(7_u64)
   end
 
+  it "writes new batch counter mutations to WAL and replays them" do
+    dump_dir = File.expand_path(".spec_wal_batch_mutations_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({
+      v:      2,
+      op:     "series.batch_set",
+      series: "articles",
+      items:  [
+        [42_u64, 20260501_u64, 10_u64],
+        [42_u64, 20260502_u64, 7_u64],
+        [43_u64, 20260501_u64, 3_u64],
+      ],
+    }.to_json, cluster)
+    Karma::Commands.call({
+      v:      2,
+      op:     "counter.batch_delete_range",
+      series: "articles",
+      keys:   [42_u64],
+      range:  {from: 20260501_u64, to: 20260501_u64},
+    }.to_json, cluster)
+    Karma::Commands.call({
+      v:      2,
+      op:     "counter.batch_reset",
+      series: "articles",
+      keys:   [43_u64],
+    }.to_json, cluster)
+
+    wal = File.read(Karma::Wal.path(dump_dir))
+    wal.should contain("\"op\":\"series.batch_set\"")
+    wal.should contain("\"op\":\"counter.batch_delete_range\"")
+    wal.should contain("\"op\":\"counter.batch_reset\"")
+
+    restored = Karma::Cluster.restore_with_wal(dump_dir)
+    restored.get("articles").sum(42_u64, 20260501_u64, 20260501_u64).should eq(0_u64)
+    restored.get("articles").sum(42_u64, 20260502_u64, 20260502_u64).should eq(7_u64)
+    restored.get("articles").sum(43_u64).should eq(0_u64)
+  end
+
   it "replays streaming ingest chunks idempotently" do
     dump_dir = File.expand_path(".spec_wal_ingest_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }

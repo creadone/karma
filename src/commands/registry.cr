@@ -12,7 +12,11 @@ module Karma
       "decrement"             => Commands::Decrement,
       "sum"                   => Commands::Sum,
       "batch_sum"             => Commands::BatchSum,
+      "multi_sum"             => Commands::MultiSum,
       "batch_add"             => Commands::BatchAdd,
+      "batch_set"             => Commands::BatchSet,
+      "batch_reset"           => Commands::BatchReset,
+      "batch_delete_range"    => Commands::BatchDeleteRange,
       "delete_before"         => Commands::DeleteBefore,
       "compact"               => Commands::Compact,
       "find"                  => Commands::Find,
@@ -51,6 +55,7 @@ module Karma
       verify
       sum
       batch_sum
+      multi_sum
       find
       tree_info
       tree_keys
@@ -71,6 +76,9 @@ module Karma
       decrement
       delete
       reset
+      batch_reset
+      batch_set
+      batch_delete_range
       batch_add
       delete_before
       compact

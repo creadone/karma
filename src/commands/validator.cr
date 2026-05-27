@@ -37,9 +37,22 @@ module Karma
         require_tree_name(directive)
         require_keys(directive)
         require_complete_range(directive) if directive.time_from || directive.time_to
+      when "multi_sum"
+        require_multi_sum_items(directive)
+        require_complete_range(directive) if directive.time_from || directive.time_to
       when "batch_add"
         require_tree_name(directive)
         require_items(directive)
+      when "batch_set"
+        require_tree_name(directive)
+        require_items(directive, allow_zero: true)
+      when "batch_reset"
+        require_tree_name(directive)
+        require_keys(directive)
+      when "batch_delete_range"
+        require_tree_name(directive)
+        require_keys(directive)
+        require_complete_range(directive)
       when "delete_before"
         require_tree_name(directive)
         require_date(directive)

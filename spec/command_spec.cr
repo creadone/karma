@@ -333,6 +333,62 @@ describe Karma::Commands do
     parsed["response"].as_a.should be_empty
   end
 
+  it "supports v2 multi-series sums in request order" do
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "links", key: 101_u64, bucket: 20260501_u64, value: 2_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "links", key: 101_u64, bucket: 20260502_u64, value: 40_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "domains", key: 101_u64, bucket: 20260501_u64, value: 3_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "tree.create", series: "pixels"}.to_json, cluster)
+
+    response = Karma::Commands.call({
+      v:     2,
+      op:    "counter.multi_sum",
+      range: {from: 20260501_u64, to: 20260501_u64},
+      items: [
+        {series: "links", key: 101_u64},
+        {series: "domains", key: 101_u64},
+        {series: "pixels", key: 101_u64},
+        {series: "links", key: 999_u64},
+      ],
+    }.to_json, cluster)
+    parsed = parse_response(response)
+    values = parsed["response"].as_a
+
+    parsed["protocol_version"].as_i.should eq(2)
+    parsed["success"].as_bool.should be_true
+    values.map { |item| item["series"].as_s }.should eq(["links", "domains", "pixels", "links"])
+    values.map { |item| item["key"].as_i }.should eq([101, 101, 101, 999])
+    values.map { |item| item["value"].as_i }.should eq([2, 3, 0, 0])
+  end
+
+  it "rejects v2 multi-series sums for missing series without creating them" do
+    cluster = Karma::Cluster.new
+    Karma::Commands.call({v: 2, op: "tree.create", series: "links"}.to_json, cluster)
+
+    response = Karma::Commands.call({
+      v:     2,
+      op:    "counter.multi_sum",
+      items: [{series: "links", key: 101_u64}, {series: "missing", key: 101_u64}],
+    }.to_json, cluster)
+    parsed = parse_response(response)
+
+    parsed["success"].as_bool.should be_false
+    parsed["error_code"].as_s.should eq("not_found")
+    cluster.trees.has_key?("missing").should be_false
+  end
+
+  it "supports empty v2 multi-series sums" do
+    cluster = Karma::Cluster.new
+
+    response = Karma::Commands.call({v: 2, op: "counter.multi_sum", items: [] of Hash(String, UInt64)}.to_json, cluster)
+    parsed = parse_response(response)
+
+    parsed["success"].as_bool.should be_true
+    parsed["response"].as_a.should be_empty
+    cluster.tree_count.should eq(0)
+  end
+
   it "supports max-size v2 batch add and batch sum when byte limits allow it" do
     Karma.configure do |c|
       c.max_request_bytes = 1_048_576
@@ -435,6 +491,61 @@ describe Karma::Commands do
     cluster.get("links").sum(42_u64, 20260505_u64, 20260505_u64).should eq(3_u64)
   end
 
+  it "supports v2 batch set with zero deletes and duplicate last value wins" do
+    cluster = Karma::Cluster.new
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "usage", key: 101_u64, bucket: 20260527_u64, value: 10_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "usage", key: 103_u64, bucket: 20260527_u64, value: 9_u64}.to_json, cluster)
+
+    response = Karma::Commands.call({
+      v:      2,
+      op:     "series.batch_set",
+      series: "usage",
+      items:  [
+        [101_u64, 20260527_u64, 42_u64],
+        [102_u64, 20260527_u64, 5_u64],
+        [101_u64, 20260527_u64, 7_u64],
+        [103_u64, 20260527_u64, 0_u64],
+      ],
+    }.to_json, cluster)
+    parsed = parse_response(response)
+
+    parsed["success"].as_bool.should be_true
+    parsed["response"]["applied"].as_i.should eq(4)
+    parsed["response"].as_h.has_key?("total").should be_false
+    cluster.get("usage").sum(101_u64, 20260527_u64, 20260527_u64).should eq(7_u64)
+    cluster.get("usage").sum(102_u64, 20260527_u64, 20260527_u64).should eq(5_u64)
+    cluster.get("usage").sum(103_u64, 20260527_u64, 20260527_u64).should eq(0_u64)
+  end
+
+  it "supports empty v2 batch set without changing series" do
+    cluster = Karma::Cluster.new
+
+    response = Karma::Commands.call({v: 2, op: "series.batch_set", series: "usage", items: [] of Array(UInt64)}.to_json, cluster)
+    parsed = parse_response(response)
+
+    parsed["success"].as_bool.should be_true
+    parsed["response"]["applied"].as_i.should eq(0)
+    cluster.trees.has_key?("usage").should be_false
+  end
+
+  it "rejects invalid v2 batch set before creating or partially changing data" do
+    cluster = Karma::Cluster.new
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "existing", key: 101_u64, bucket: 20260527_u64, value: 10_u64}.to_json, cluster)
+
+    missing_response = Karma::Commands.call(%({"v":2,"op":"series.batch_set","series":"missing","items":[[101,20260527,-1]]}), cluster)
+    missing = parse_response(missing_response)
+    missing["success"].as_bool.should be_false
+    missing["error_code"].as_s.should eq("validation_error")
+    cluster.trees.has_key?("missing").should be_false
+
+    existing_response = Karma::Commands.call(%({"v":2,"op":"series.batch_set","series":"existing","items":[[101,20260527,5],[102,-20260527,5]]}), cluster)
+    existing = parse_response(existing_response)
+    existing["success"].as_bool.should be_false
+    existing["error_code"].as_s.should eq("validation_error")
+    cluster.get("existing").sum(101_u64, 20260527_u64, 20260527_u64).should eq(10_u64)
+    cluster.get("existing").sum(102_u64).should eq(0_u64)
+  end
+
   it "rejects malformed v2 batch increment items before applying them" do
     cluster = Karma::Cluster.new
 
@@ -466,6 +577,106 @@ describe Karma::Commands do
     parsed["success"].as_bool.should be_false
     parsed["error_code"].as_s.should eq("validation_error")
     cluster.trees.has_key?("links").should be_false
+  end
+
+  it "supports v2 batch reset with missing keys and idempotent repeats" do
+    cluster = Karma::Cluster.new
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "usage", key: 101_u64, bucket: 20260527_u64, value: 4_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "usage", key: 102_u64, bucket: 20260527_u64, value: 5_u64}.to_json, cluster)
+
+    response = Karma::Commands.call({
+      v:      2,
+      op:     "counter.batch_reset",
+      series: "usage",
+      keys:   [101_u64, 102_u64, 999_u64],
+    }.to_json, cluster)
+    parsed = parse_response(response)
+
+    parsed["success"].as_bool.should be_true
+    parsed["response"]["reset"].as_i.should eq(2)
+    parsed["response"]["missing"].as_i.should eq(1)
+    cluster.get("usage").sum(101_u64).should eq(0_u64)
+    cluster.get("usage").sum(102_u64).should eq(0_u64)
+
+    repeat = parse_response(Karma::Commands.call({
+      v:      2,
+      op:     "counter.batch_reset",
+      series: "usage",
+      keys:   [101_u64, 102_u64],
+    }.to_json, cluster))
+    repeat["success"].as_bool.should be_true
+    repeat["response"]["reset"].as_i.should eq(0)
+    repeat["response"]["missing"].as_i.should eq(2)
+  end
+
+  it "rejects v2 batch reset for missing series and negative keys" do
+    cluster = Karma::Cluster.new
+
+    missing_series = parse_response(Karma::Commands.call({
+      v:      2,
+      op:     "counter.batch_reset",
+      series: "missing",
+      keys:   [] of UInt64,
+    }.to_json, cluster))
+    missing_series["success"].as_bool.should be_false
+    missing_series["error_code"].as_s.should eq("not_found")
+
+    negative = parse_response(Karma::Commands.call(%({"v":2,"op":"counter.batch_reset","series":"missing","keys":[-1]}), cluster))
+    negative["success"].as_bool.should be_false
+    negative["error_code"].as_s.should eq("validation_error")
+    cluster.trees.has_key?("missing").should be_false
+  end
+
+  it "supports v2 batch delete range while preserving outside buckets" do
+    cluster = Karma::Cluster.new
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "usage", key: 101_u64, bucket: 20260501_u64, value: 2_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "usage", key: 101_u64, bucket: 20260601_u64, value: 3_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "usage", key: 102_u64, bucket: 20260502_u64, value: 4_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "usage", key: 103_u64, bucket: 20260430_u64, value: 5_u64}.to_json, cluster)
+
+    response = Karma::Commands.call({
+      v:      2,
+      op:     "counter.batch_delete_range",
+      series: "usage",
+      keys:   [101_u64, 102_u64, 103_u64, 999_u64],
+      range:  {from: 20260501_u64, to: 20260531_u64},
+    }.to_json, cluster)
+    parsed = parse_response(response)
+
+    parsed["success"].as_bool.should be_true
+    parsed["response"]["deleted"].as_i.should eq(2)
+    parsed["response"]["missing"].as_i.should eq(1)
+    cluster.get("usage").sum(101_u64, 20260501_u64, 20260531_u64).should eq(0_u64)
+    cluster.get("usage").sum(101_u64, 20260601_u64, 20260601_u64).should eq(3_u64)
+    cluster.get("usage").sum(102_u64).should eq(0_u64)
+    cluster.get("usage").sum(103_u64).should eq(5_u64)
+
+    repeat = parse_response(Karma::Commands.call({
+      v:      2,
+      op:     "counter.batch_delete_range",
+      series: "usage",
+      keys:   [101_u64, 102_u64],
+      range:  {from: 20260501_u64, to: 20260531_u64},
+    }.to_json, cluster))
+    repeat["success"].as_bool.should be_true
+    repeat["response"]["deleted"].as_i.should eq(0)
+    repeat["response"]["missing"].as_i.should eq(1)
+  end
+
+  it "rejects invalid v2 batch delete range without partial changes" do
+    cluster = Karma::Cluster.new
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "usage", key: 101_u64, bucket: 20260501_u64, value: 2_u64}.to_json, cluster)
+
+    response = Karma::Commands.call(%({"v":2,"op":"counter.batch_delete_range","series":"usage","keys":[101],"range":{"from":20260531,"to":20260501}}), cluster)
+    parsed = parse_response(response)
+    parsed["success"].as_bool.should be_false
+    parsed["error_code"].as_s.should eq("validation_error")
+    cluster.get("usage").sum(101_u64).should eq(2_u64)
+
+    negative = parse_response(Karma::Commands.call(%({"v":2,"op":"counter.batch_delete_range","series":"usage","keys":[101],"range":{"from":-20260501,"to":20260531}}), cluster))
+    negative["success"].as_bool.should be_false
+    negative["error_code"].as_s.should eq("validation_error")
+    cluster.get("usage").sum(101_u64).should eq(2_u64)
   end
 
   it "supports v2 streaming ingest add chunks" do
@@ -812,6 +1023,32 @@ describe Karma::Commands do
     parsed["success"].as_bool.should be_false
     parsed["error_code"].as_s.should eq("validation_error")
     parsed["response"].as_s.should eq("Field key is required")
+  end
+
+  it "rejects negative v2 unsigned counter fields as validation errors" do
+    cluster = Karma::Cluster.new
+
+    requests = [
+      %({"v":2,"op":"counter.increment","series":"negative_key","key":-1}),
+      %({"v":2,"op":"counter.increment","series":"negative_bucket","key":1,"bucket":-20260527,"value":1}),
+      %({"v":2,"op":"counter.increment","series":"negative_value","key":1,"bucket":20260527,"value":-1}),
+      %({"v":2,"op":"series.batch_add","series":"negative_item_key","items":[[-1,20260527,1]]}),
+      %({"v":2,"op":"series.batch_add","series":"negative_item_bucket","items":[[1,-20260527,1]]}),
+      %({"v":2,"op":"series.batch_add","series":"negative_item_value","items":[[1,20260527,-1]]}),
+      %({"v":2,"op":"counter.batch_sum","series":"negative_keys","keys":[-1]}),
+      %({"v":2,"op":"counter.sum","series":"negative_range","key":1,"range":{"from":-20260501,"to":20260531}}),
+      %({"v":2,"op":"counter.sum","series":"negative_range","key":1,"range":{"from":20260501,"to":-20260531}}),
+    ]
+
+    requests.each do |request|
+      parsed = parse_response(Karma::Commands.call(request, cluster))
+
+      parsed["protocol_version"].as_i.should eq(2)
+      parsed["success"].as_bool.should be_false
+      parsed["error_code"].as_s.should eq("validation_error")
+    end
+
+    cluster.tree_count.should eq(0)
   end
 
   it "authenticates v2 requests" do

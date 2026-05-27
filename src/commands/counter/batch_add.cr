@@ -3,8 +3,12 @@ module Karma
     module BatchAdd
       def self.call(directive, cluster)
         items = directive.items.not_nil!
+        series_name = directive.series_name
+        if cluster.trees[series_name]?.nil?
+          preflight!(CounterTree::Tree.new, items)
+        end
 
-        cluster.pick(directive.series_name) do |tree|
+        cluster.pick(series_name) do |tree|
           return apply(tree, items)
         end
       end

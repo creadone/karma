@@ -50,6 +50,20 @@ module Karma
         json.field "series", directive.tree_name
         json.field "granularity", "day"
         json.field "items", directive.items
+      when "batch_set"
+        json.field "op", "series.batch_set"
+        json.field "series", directive.tree_name
+        json.field "granularity", "day"
+        json.field "items", directive.items
+      when "batch_reset"
+        json.field "op", "counter.batch_reset"
+        json.field "series", directive.tree_name
+        json.field "keys", directive.keys
+      when "batch_delete_range"
+        json.field "op", "counter.batch_delete_range"
+        json.field "series", directive.tree_name
+        json.field "keys", directive.keys
+        write_range(json, directive)
       when "delete_before"
         json.field "op", "series.delete_before"
         json.field "series", directive.tree_name

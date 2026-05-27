@@ -283,10 +283,23 @@ Read many totals for a range:
 {"v":2,"op":"counter.batch_sum","series":"links","keys":[41,42,43],"range":{"from":20260501,"to":20260505}}
 ```
 
+Read totals across several series in one request:
+
+```json
+{"v":2,"op":"counter.multi_sum","items":[{"series":"links","key":101},{"series":"domains","key":101},{"series":"pixels","key":101}]}
+{"v":2,"op":"counter.multi_sum","range":{"from":20260501,"to":20260531},"items":[{"series":"imports","key":101},{"series":"exports","key":101}]}
+```
+
 Add many `[key, bucket, value]` items:
 
 ```json
 {"v":2,"op":"series.batch_add","series":"links","items":[[42,20260505,10],[43,20260505,3]]}
+```
+
+Set exact `[key, bucket, value]` items. A zero value deletes that bucket:
+
+```json
+{"v":2,"op":"series.batch_set","series":"links","items":[[42,20260505,10],[43,20260505,0]]}
 ```
 
 Large batch requests must fit `--max-request-bytes`.
@@ -348,6 +361,7 @@ Reset one key or a whole series:
 ```json
 {"v":2,"op":"counter.reset","series":"links","key":42}
 {"v":2,"op":"tree.reset","series":"links"}
+{"v":2,"op":"counter.batch_reset","series":"links","keys":[41,42,43]}
 ```
 
 Delete a date range:
@@ -355,6 +369,7 @@ Delete a date range:
 ```json
 {"v":2,"op":"counter.delete_range","series":"links","key":42,"range":{"from":20260501,"to":20260505}}
 {"v":2,"op":"tree.delete_range","series":"links","range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"counter.batch_delete_range","series":"links","keys":[41,42,43],"range":{"from":20260501,"to":20260505}}
 ```
 
 ### Streaming Ingest

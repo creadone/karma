@@ -2,6 +2,16 @@ require "json"
 
 module Karma
   module Commands
+    struct MultiSumItem
+      include JSON::Serializable
+
+      property series : String
+      property key : UInt64
+
+      def initialize(@series : String, @key : UInt64)
+      end
+    end
+
     struct Directive
       include JSON::Serializable
 
@@ -10,6 +20,7 @@ module Karma
       property key : UInt64?
       property keys : Array(UInt64)?
       property items : Array(Array(UInt64))?
+      property multi_sum_items : Array(MultiSumItem)?
       property time_from : UInt64?
       property time_to : UInt64?
       property date : UInt64?
@@ -37,6 +48,7 @@ module Karma
         @key : UInt64? = nil,
         @keys : Array(UInt64)? = nil,
         @items : Array(Array(UInt64))? = nil,
+        @multi_sum_items : Array(MultiSumItem)? = nil,
         @time_from : UInt64? = nil,
         @time_to : UInt64? = nil,
         @date : UInt64? = nil,

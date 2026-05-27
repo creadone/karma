@@ -1,6 +1,21 @@
 module Karma
   module Commands
     module BatchSet
+      def self.call(directive, cluster)
+        items = directive.items.not_nil!
+        return {applied: 0} if items.empty?
+
+        series_name = directive.series_name
+        if cluster.trees[series_name]?.nil?
+          preflight!(CounterTree::Tree.new, items)
+        end
+
+        cluster.pick(series_name) do |tree|
+          result = apply(tree, items)
+          return {applied: result[:applied]}
+        end
+      end
+
       def self.apply(tree, items : Array(Array(UInt64)))
         preflight!(tree, items)
 
