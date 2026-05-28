@@ -210,6 +210,19 @@ If `--auth-token` is configured, include `token` in every client request. If
 `--read-auth-token` is configured, that token can execute read-only commands
 only. Tokens are not written to WAL.
 
+## Ruby/Rails Client
+
+A Ruby client package is available in [clients/ruby](clients/ruby). It uses the
+v2 TCP JSON protocol, has explicit connect/read/write timeouts, maps stable
+Karma error codes to Ruby exceptions, and includes Rails configuration and a
+small connection pool for Puma/Sidekiq workloads.
+
+Rails applications can add it from this repository:
+
+```ruby
+gem "karma_client", path: "clients/ruby"
+```
+
 ## Data Model
 
 * A **series** is a named collection of counters. The storage layer and legacy
