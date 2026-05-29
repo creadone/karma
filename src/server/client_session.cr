@@ -16,6 +16,10 @@ module Karma
           write_line(answer)
         end
       end
+    rescue IO::TimeoutError
+      nil
+    rescue IO::Error
+      nil
     end
 
     private def configure_timeouts : Nil
