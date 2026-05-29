@@ -24,6 +24,8 @@ module Karma
     property replication_batch_size : Int32 = 1_000
     property auth_token : String?
     property read_auth_token : String?
+    property idempotency_max_records : Int32 = 1_000_000
+    property idempotency_max_age_seconds : Int32 = 604_800
     property log : Bool = true
 
     def load_env! : Nil
@@ -49,6 +51,8 @@ module Karma
       @replication_batch_size = int_env("KARMA_REPLICATION_BATCH_SIZE", @replication_batch_size)
       @auth_token = optional_string_env("KARMA_AUTH_TOKEN", @auth_token)
       @read_auth_token = optional_string_env("KARMA_READ_AUTH_TOKEN", @read_auth_token)
+      @idempotency_max_records = int_env("KARMA_IDEMPOTENCY_MAX_RECORDS", @idempotency_max_records)
+      @idempotency_max_age_seconds = int_env("KARMA_IDEMPOTENCY_MAX_AGE_SECONDS", @idempotency_max_age_seconds)
       @log = bool_env("KARMA_LOG", @log)
     end
 
@@ -64,6 +68,8 @@ module Karma
       raise_validation("query_timeout_ms must be greater than or equal to 0") unless @query_timeout_ms >= 0
       raise_validation("shutdown_timeout_seconds must be greater than or equal to 0") unless @shutdown_timeout_seconds >= 0
       raise_validation("dump_retention_per_tree must be greater than or equal to 0") unless @dump_retention_per_tree >= 0
+      raise_validation("idempotency_max_records must be greater than 0") unless @idempotency_max_records > 0
+      raise_validation("idempotency_max_age_seconds must be greater than or equal to 0") unless @idempotency_max_age_seconds >= 0
       validate_replication!
     end
 

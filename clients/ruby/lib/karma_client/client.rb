@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "date"
+require "time"
 
 module KarmaClient
   class Client
@@ -61,8 +62,8 @@ module KarmaClient
       call("tree.list")
     end
 
-    def reset_series(series)
-      call("tree.reset", series: normalize_series(series))
+    def reset_series(series, idempotency_key: nil, fingerprint: nil)
+      call("tree.reset", series: normalize_series(series), **idempotency_fields(idempotency_key, fingerprint))
     end
 
     def series_info(series)
@@ -98,23 +99,25 @@ module KarmaClient
       call("series.delete_before", series: normalize_series(series), before: normalize_bucket(before, "before"))
     end
 
-    def increment(series:, key:, value: 1, bucket: nil)
+    def increment(series:, key:, value: 1, bucket: nil, idempotency_key: nil, fingerprint: nil)
       call(
         "counter.increment",
         series: normalize_series(series),
         key: normalize_u64(key, "key"),
         value: normalize_u64(value, "value"),
-        bucket: optional_bucket(bucket, "bucket")
+        bucket: optional_bucket(bucket, "bucket"),
+        **idempotency_fields(idempotency_key, fingerprint)
       )
     end
 
-    def decrement(series:, key:, value: 1, bucket: nil)
+    def decrement(series:, key:, value: 1, bucket: nil, idempotency_key: nil, fingerprint: nil)
       call(
         "counter.decrement",
         series: normalize_series(series),
         key: normalize_u64(key, "key"),
         value: normalize_u64(value, "value"),
-        bucket: optional_bucket(bucket, "bucket")
+        bucket: optional_bucket(bucket, "bucket"),
+        **idempotency_fields(idempotency_key, fingerprint)
       )
     end
 
@@ -161,38 +164,60 @@ module KarmaClient
       )
     end
 
-    def batch_add(series:, items:)
-      call("series.batch_add", series: normalize_series(series), items: normalize_items(items))
+    def batch_add(series:, items:, idempotency_key: nil, fingerprint: nil)
+      call(
+        "series.batch_add",
+        series: normalize_series(series),
+        items: normalize_items(items),
+        **idempotency_fields(idempotency_key, fingerprint)
+      )
     end
 
-    def batch_set(series:, items:)
-      call("series.batch_set", series: normalize_series(series), items: normalize_items(items))
+    def batch_set(series:, items:, idempotency_key: nil, fingerprint: nil)
+      call(
+        "series.batch_set",
+        series: normalize_series(series),
+        items: normalize_items(items),
+        **idempotency_fields(idempotency_key, fingerprint)
+      )
     end
 
-    def reset_counter(series:, key:)
-      call("counter.reset", series: normalize_series(series), key: normalize_u64(key, "key"))
+    def reset_counter(series:, key:, idempotency_key: nil, fingerprint: nil)
+      call(
+        "counter.reset",
+        series: normalize_series(series),
+        key: normalize_u64(key, "key"),
+        **idempotency_fields(idempotency_key, fingerprint)
+      )
     end
 
-    def batch_reset(series:, keys:)
-      call("counter.batch_reset", series: normalize_series(series), keys: normalize_keys(keys))
+    def batch_reset(series:, keys:, idempotency_key: nil, fingerprint: nil)
+      call(
+        "counter.batch_reset",
+        series: normalize_series(series),
+        keys: normalize_keys(keys),
+        **idempotency_fields(idempotency_key, fingerprint)
+      )
     end
 
-    def delete_range(series:, key: nil, range: nil, from: nil, to: nil)
+    def delete_range(series:, key: nil, range: nil, from: nil, to: nil, idempotency_key: nil, fingerprint: nil)
       operation = key.nil? ? "tree.delete_range" : "counter.delete_range"
       call(
         operation,
         series: normalize_series(series),
         key: optional_u64(key, "key"),
-        range: range_payload(range: range, from: from, to: to, required: true)
+        range: range_payload(range: range, from: from, to: to, required: true),
+        **idempotency_fields(idempotency_key, fingerprint)
       )
     end
 
-    def batch_delete_range(series:, keys:, range: nil, from: nil, to: nil)
+    def batch_delete_range(series:, keys:, range: nil, from: nil, to: nil, idempotency_key: nil, fingerprint: nil)
       call(
         "counter.batch_delete_range",
         series: normalize_series(series),
         keys: normalize_keys(keys),
-        range: range_payload(range: range, from: from, to: to, required: true)
+        range: range_payload(range: range, from: from, to: to, required: true),
+        **idempotency_fields(idempotency_key, fingerprint)
       )
     end
 
@@ -286,6 +311,10 @@ module KarmaClient
       call("replication.entries", after_lsn: normalize_u64(after_lsn, "after_lsn"), limit: optional_limit(limit))
     end
 
+    def idempotency_prune(before:, limit: nil)
+      call("idempotency.prune", before: normalize_timestamp(before, "before"), limit: optional_limit(limit))
+    end
+
     private
 
     def build_configuration(configuration, options)
@@ -325,6 +354,13 @@ module KarmaClient
       end
 
       payload
+    end
+
+    def idempotency_fields(idempotency_key, fingerprint)
+      {
+        idempotency_key: optional_string(idempotency_key, "idempotency_key"),
+        fingerprint: optional_string(fingerprint, "fingerprint")
+      }
     end
 
     def instrument(payload)
@@ -528,6 +564,19 @@ module KarmaClient
       raise InputError, "file must end with .tree" unless value.end_with?(".tree")
 
       value
+    end
+
+    def normalize_timestamp(value, field)
+      case value
+      when Integer
+        normalize_integer(value, field)
+      when Time
+        value.utc.iso8601
+      when Date
+        Time.utc(value.year, value.month, value.day).iso8601
+      else
+        normalize_string(value, field)
+      end
     end
   end
 end

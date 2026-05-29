@@ -49,6 +49,10 @@ private class FakeSnapshotClient < Karma::Replication::SnapshotClient
       offset = parsed["offset"].as_i64.to_u64
       limit = parsed["limit"].as_i.to_i32
       JSON.parse(Karma::Backup.fetch_chunk(File.join(@master_dir, file), offset, limit).to_json)
+    when "idempotency.snapshot_fetch_chunk"
+      offset = parsed["offset"].as_i64.to_u64
+      limit = parsed["limit"].as_i.to_i32
+      JSON.parse(Karma::Idempotency.fetch_chunk(offset, limit, @master_dir).to_json)
     else
       raise "Unexpected op #{parsed["op"].as_s}"
     end
@@ -139,18 +143,49 @@ describe Karma::Replication do
     slave_dir = File.expand_path(".spec_replication_remote_slave_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = master_dir }
     master = Karma::Cluster.new
+    idempotent_request = {
+      v:               2,
+      op:              "series.batch_add",
+      series:          "links",
+      items:           [[42_u64, 20260529_u64, 5_u64]],
+      idempotency_key: "replication-bootstrap-event",
+    }.to_json
 
     Karma::Commands.call({v: 2, op: "counter.increment", tree: "links", key: 42_u64, value: 7_u64}.to_json, master)
+    Karma::Commands.call(idempotent_request, master)
     master.dump_all
-    file = File.basename(Karma::Backup.dumps(master_dir).first)
     info = JSON.parse(Karma::Backup.info(master_dir).to_json)
     client = FakeSnapshotClient.new(info, master_dir)
 
-    client.bootstrap_files(slave_dir).should eq(1_u64)
-    Karma::Backup.restore_lsn(slave_dir).should eq(1_u64)
-    restored = Karma::Cluster.restore(slave_dir)
+    client.bootstrap_files(slave_dir).should eq(2_u64)
+    Karma::Backup.restore_lsn(slave_dir).should eq(2_u64)
+    restored = Karma::Cluster.restore_with_wal(slave_dir)
+    repeat = parse_response(Karma::Commands.call(idempotent_request, restored))
 
-    restored.get("links").sum(42_u64).should eq(7_u64)
+    repeat["success"].as_bool.should be_true
+    repeat["idempotent"].as_bool.should be_true
+    restored.get("links").sum(42_u64).should eq(12_u64)
+  end
+
+  it "installs idempotency-only snapshots for empty slave bootstrap" do
+    master_dir = File.expand_path(".spec_replication_idempotency_master_#{Time.local.to_unix_ms}")
+    slave_dir = File.expand_path(".spec_replication_idempotency_slave_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = master_dir }
+    master = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "ingest.begin", stream_id: "empty-import", mode: "add"}.to_json, master)
+    Karma::Commands.call({v: 2, op: "ingest.commit", stream_id: "empty-import"}.to_json, master)
+    master.dump_all
+    info = JSON.parse(Karma::Backup.info(master_dir).to_json)
+    client = FakeSnapshotClient.new(info, master_dir)
+
+    client.bootstrap_files(slave_dir).should eq(2_u64)
+    Karma::Backup.restore_lsn(slave_dir).should eq(2_u64)
+    restored = Karma::Cluster.restore_with_wal(slave_dir)
+    repeat = parse_response(Karma::Commands.call({v: 2, op: "ingest.commit", stream_id: "empty-import"}.to_json, restored))
+
+    repeat["success"].as_bool.should be_true
+    repeat["response"]["status"].as_s.should eq("already_committed")
   end
 
   it "skips already replayed entries and applies the next LSN" do

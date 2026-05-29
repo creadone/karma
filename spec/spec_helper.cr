@@ -13,6 +13,7 @@ Spec.before_each do
     c.replication_poll_interval_ms = 1_000
     c.replication_batch_size = 1_000
   end
+  Karma::Idempotency.reset!
   Karma::Ingest.reset!
   Karma::Recovery.reset!
   Karma::Replication.reset!

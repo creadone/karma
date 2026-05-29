@@ -144,6 +144,8 @@ option name ends with `-ms`.
 | `--auth-token=token` | `KARMA_AUTH_TOKEN` | unset | Token required for all commands. Empty env value disables it. |
 | `--read-auth-token=token` | `KARMA_READ_AUTH_TOKEN` | unset | Token allowed only for read-only commands. Empty env value disables it. |
 | `--dump-retention-per-tree=count` | `KARMA_DUMP_RETENTION_PER_TREE` | `5` | Snapshots to keep per series after `snapshot.create_all`. |
+| `--idempotency-max-records=count` | `KARMA_IDEMPOTENCY_MAX_RECORDS` | `1000000` | Maximum remembered idempotency write records. |
+| `--idempotency-max-age-seconds=seconds` | `KARMA_IDEMPOTENCY_MAX_AGE_SECONDS` | `604800` | Maximum idempotency record age. Use 0 to disable age pruning. |
 | `--replication-source-host=host` | `KARMA_REPLICATION_SOURCE_HOST` | unset | Master host used by slave polling. |
 | `--replication-source-port=port` | `KARMA_REPLICATION_SOURCE_PORT` | `8080` | Master port used by slave polling. |
 | `--replication-token=token` | `KARMA_REPLICATION_TOKEN` | unset | Token used by slave replication requests. |
@@ -202,6 +204,7 @@ Stable error codes:
 * `request_too_large`
 * `response_too_large`
 * `query_timeout`
+* `idempotency_conflict`
 * `replication_gap`
 * `replication_error`
 * `internal_error`
@@ -209,6 +212,50 @@ Stable error codes:
 If `--auth-token` is configured, include `token` in every client request. If
 `--read-auth-token` is configured, that token can execute read-only commands
 only. Tokens are not written to WAL.
+
+## Idempotency
+
+Write commands can include an optional `idempotency_key`. Karma records the
+first successful request fingerprint and response for that key. Repeating the
+same command with the same key and payload returns the saved response with
+top-level `"idempotent": true` and does not mutate counters again. Reusing a
+key with a different payload returns `idempotency_conflict`.
+
+Eligible commands:
+
+* `counter.increment`, `counter.decrement`;
+* `series.batch_add`, `series.batch_set`;
+* `counter.reset`, `counter.batch_reset`;
+* `counter.delete_range`, `counter.batch_delete_range`;
+* `tree.reset`, `tree.delete_range`.
+
+Example:
+
+```json
+{"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":1,"idempotency_key":"click-event-123"}
+```
+
+The response envelope includes `idempotent: false` for the first successful
+idempotent write and `idempotent: true` for a deduplicated repeat.
+
+Invalid requests do not occupy the key. The fingerprint is computed on the
+server from the canonical command payload and ignores `v`, `token`,
+`idempotency_key`, and `fingerprint`. Batch item order is part of the
+fingerprint. Clients may pass `fingerprint` only as an assertion; it must match
+the server-computed value.
+
+Idempotency records are persisted through WAL and `snapshot.create_all`.
+Retention is controlled by `--idempotency-max-records`,
+`--idempotency-max-age-seconds`, and the manual prune command:
+
+```json
+{"v":2,"op":"idempotency.prune","before":"2026-05-29T00:00:00Z","limit":10000}
+```
+
+Streaming ingest is idempotent by `stream_id`: after `ingest.commit`, repeated
+`ingest.commit`, compatible `ingest.begin`, and identical committed chunks are
+reported as already committed/skipped without applying data again. A committed
+stream with different parameters or chunks returns `idempotency_conflict`.
 
 ## Ruby/Rails Client
 
@@ -410,7 +457,10 @@ Abort an active stream:
 ```
 
 Duplicate chunks are skipped. Out-of-order chunks are rejected before they are
-applied. A stream is bound to the series used by its first chunk.
+applied. A stream is bound to the series used by its first chunk. Committed
+streams are remembered durably so a repeated `replace_series` commit cannot
+replace the series again after restart, snapshot restore, or replication
+bootstrap.
 
 ## Snapshots, WAL, and Recovery
 
@@ -561,6 +611,8 @@ Metric groups include:
 * batch read/write counters;
 * retention and compaction counters;
 * ingest stream counters and latency;
+* idempotency record, hit, conflict, prune, and committed ingest stream
+  counters;
 * reconciliation and recovery counters;
 * replication lag, replayed LSN, polling/bootstrap success and error counters.
 
@@ -603,34 +655,44 @@ Local results depend on CPU, disk, filesystem, container runtime, network, and
 workload mix. The scripts below are intended as repeatable local checks, not as
 universal benchmarks.
 
-Last recorded local results from 2026-05-05:
+Last recorded local results from 2026-05-29:
 
 | Test | Mode | Throughput | p95 latency |
 | --- | --- | ---: | ---: |
-| `single_increment` | in-process, WAL off | 289,908 ops/sec | 0.004 ms |
-| `single_sum` | in-process, WAL off | 403,080 ops/sec | 0.0026 ms |
-| `series.batch_add` | in-process, WAL off | 1,917,010 items/sec | 0.9878 ms |
-| `counter.batch_sum` | in-process, WAL off | 2,389,520 key reads/sec | 0.8685 ms |
-| `tcp_single_increment` | TCP, 4 clients, WAL on, fsync on | 12,818 ops/sec | 0.5561 ms |
-| `tcp_single_sum` | TCP, 4 clients, WAL on, fsync on | 41,340 ops/sec | 0.1339 ms |
-| `tcp_series.batch_add` | TCP, 4 clients, WAL on, fsync on | 744,551 items/sec | 2.9103 ms |
-| `tcp_counter.batch_sum` | TCP, 4 clients, WAL on, fsync on | 1,708,312 key reads/sec | 1.5604 ms |
+| `single_increment` | in-process, WAL off | 274,908 ops/sec | 0.0048 ms |
+| `single_sum` | in-process, WAL off | 406,078 ops/sec | 0.0026 ms |
+| `series.batch_add` | in-process, WAL off | 1,940,884 items/sec | 1.0552 ms |
+| `counter.batch_sum` | in-process, WAL off | 2,398,552 key reads/sec | 0.8581 ms |
+| `tcp_single_increment` | TCP, 4 clients, WAL off | 34,338 ops/sec | 0.1989 ms |
+| `tcp_single_sum` | TCP, 4 clients, WAL off | 40,097 ops/sec | 0.1241 ms |
+| `tcp_series.batch_add` | TCP, 4 clients, WAL off | 1,642,115 items/sec | 2.0443 ms |
+| `tcp_counter.batch_sum` | TCP, 4 clients, WAL off | 2,023,058 key reads/sec | 2.5341 ms |
+| `tcp_single_increment` | TCP, 4 clients, WAL on, fsync off | 4,078 ops/sec | 1.3904 ms |
+| `tcp_single_sum` | TCP, 4 clients, WAL on, fsync off | 38,913 ops/sec | 0.1266 ms |
+| `tcp_series.batch_add` | TCP, 4 clients, WAL on, fsync off | 970,674 items/sec | 3.6078 ms |
+| `tcp_counter.batch_sum` | TCP, 4 clients, WAL on, fsync off | 1,797,181 key reads/sec | 2.5988 ms |
+
+Idempotency hot-path spot check, in-process, WAL off, prebuilt JSON requests:
+`counter.increment` without `idempotency_key` handled about 417,660 ops/sec;
+with unique `idempotency_key`, about 226,472 ops/sec. For high-throughput
+at-least-once producers, prefer `series.batch_add` so the idempotency overhead
+is amortized across many items.
 
 Volume sensitivity test, in-process, WAL off, 7 daily buckets per key:
 
 | Keys | Data points | Heap | Snapshot | Batch sum | Batch p95 | Summary | Snapshot | Restore |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10,000 | 70,000 | 8.23 MiB | 0.57 MiB | 2,255,027 key reads/sec | 0.8820 ms | 4.59 ms | 4.59 ms | 2.87 ms |
-| 50,000 | 350,000 | 28.48 MiB | 2.86 MiB | 1,778,740 key reads/sec | 0.4863 ms | 33.41 ms | 20.35 ms | 15.18 ms |
-| 100,000 | 700,000 | 47.70 MiB | 5.79 MiB | 1,558,846 key reads/sec | 0.4809 ms | 88.58 ms | 42.81 ms | 32.21 ms |
+| 10,000 | 70,000 | 7.99 MiB | 0.57 MiB | 2,152,874 key reads/sec | 0.8227 ms | 3.79 ms | 4.04 ms | 2.92 ms |
+| 50,000 | 350,000 | 27.66 MiB | 2.86 MiB | 1,831,463 key reads/sec | 0.4508 ms | 29.40 ms | 21.14 ms | 16.16 ms |
+| 100,000 | 700,000 | 46.78 MiB | 5.79 MiB | 1,420,289 key reads/sec | 0.4680 ms | 83.08 ms | 42.00 ms | 32.88 ms |
 
 High-cardinality yearly profile, in-process, WAL off, 356 daily buckets per key:
 
 | Keys | Data points | Heap | Snapshot | Batch sum | Batch p95 | Summary | Snapshot | Restore |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10,000 | 3,560,000 | 234.11 MiB | 20.58 MiB | 2,299,570 key reads/sec | 4.4254 ms | 140.71 ms | 80.07 ms | 115.79 ms |
-| 25,000 | 8,900,000 | 570.14 MiB | 51.45 MiB | 1,936,145 key reads/sec | 8.9875 ms | 401.43 ms | 201.91 ms | 323.58 ms |
-| 50,000 | 17,800,000 | 1,114.17 MiB | 102.90 MiB | 1,918,123 key reads/sec | 2.3001 ms | 960.62 ms | 426.69 ms | 561.90 ms |
+| 10,000 | 3,560,000 | 237.08 MiB | 20.58 MiB | 2,207,683 key reads/sec | 4.1449 ms | 149.95 ms | 81.47 ms | 121.35 ms |
+| 25,000 | 8,900,000 | 557.11 MiB | 51.45 MiB | 2,110,358 key reads/sec | 2.2563 ms | 438.43 ms | 196.75 ms | 281.82 ms |
+| 50,000 | 17,800,000 | 1,181.16 MiB | 102.90 MiB | 1,891,176 key reads/sec | 2.5203 ms | 1,009.71 ms | 473.55 ms | 690.07 ms |
 
 Replication load test on the same date used `clients=4`, `keys=10000`,
 `batch_size=1000`, `write_batches=100`, `read_rounds=100`,

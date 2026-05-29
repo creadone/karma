@@ -146,6 +146,8 @@ bin/karma
 | `--auth-token=token` | `KARMA_AUTH_TOKEN` | не задано | Токен, обязательный для всех команд. Пустое значение переменной окружения отключает проверку. |
 | `--read-auth-token=token` | `KARMA_READ_AUTH_TOKEN` | не задано | Токен только для команд чтения. Пустое значение переменной окружения отключает проверку. |
 | `--dump-retention-per-tree=count` | `KARMA_DUMP_RETENTION_PER_TREE` | `5` | Сколько снимков состояния хранить на series после `snapshot.create_all`. |
+| `--idempotency-max-records=count` | `KARMA_IDEMPOTENCY_MAX_RECORDS` | `1000000` | Максимум сохраненных записей идемпотентности. |
+| `--idempotency-max-age-seconds=seconds` | `KARMA_IDEMPOTENCY_MAX_AGE_SECONDS` | `604800` | Максимальный возраст записи идемпотентности. `0` отключает очистку по возрасту. |
 | `--replication-source-host=host` | `KARMA_REPLICATION_SOURCE_HOST` | не задано | Адрес master-узла, который будет читать slave. |
 | `--replication-source-port=port` | `KARMA_REPLICATION_SOURCE_PORT` | `8080` | Порт master-узла, который будет читать slave. |
 | `--replication-token=token` | `KARMA_REPLICATION_TOKEN` | не задано | Токен для запросов репликации со slave. |
@@ -204,6 +206,7 @@ Karma использует JSON поверх TCP: один запрос - одн
 * `request_too_large`
 * `response_too_large`
 * `query_timeout`
+* `idempotency_conflict`
 * `replication_gap`
 * `replication_error`
 * `internal_error`
@@ -211,6 +214,52 @@ Karma использует JSON поверх TCP: один запрос - одн
 Если настроен `--auth-token`, добавляйте `token` в каждый клиентский запрос.
 Если настроен `--read-auth-token`, этот токен может выполнять только команды
 чтения. Токены не пишутся в WAL.
+
+## Идемпотентность
+
+Команды записи могут передавать необязательный `idempotency_key`. Karma
+запоминает fingerprint и ответ первого успешного запроса с этим ключом.
+Повтор той же команды с тем же ключом и тем же payload возвращает сохраненный
+ответ с верхнеуровневым `"idempotent": true` и не меняет счетчики повторно.
+Повторное использование ключа с другим payload возвращает
+`idempotency_conflict`.
+
+Поддержанные команды:
+
+* `counter.increment`, `counter.decrement`;
+* `series.batch_add`, `series.batch_set`;
+* `counter.reset`, `counter.batch_reset`;
+* `counter.delete_range`, `counter.batch_delete_range`;
+* `tree.reset`, `tree.delete_range`.
+
+Пример:
+
+```json
+{"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":1,"idempotency_key":"click-event-123"}
+```
+
+В response envelope будет `idempotent: false` для первой успешной
+идемпотентной записи и `idempotent: true` для дедуплицированного повтора.
+
+Невалидные запросы не занимают ключ. Fingerprint считается на сервере из
+канонического payload команды и игнорирует `v`, `token`, `idempotency_key` и
+`fingerprint`. Порядок элементов в batch-командах входит в fingerprint.
+Клиент может передать `fingerprint` только как проверку: он должен совпасть с
+тем, что посчитает сервер.
+
+Записи идемпотентности сохраняются через WAL и `snapshot.create_all`.
+Хранение ограничивается `--idempotency-max-records`,
+`--idempotency-max-age-seconds` и ручной командой очистки:
+
+```json
+{"v":2,"op":"idempotency.prune","before":"2026-05-29T00:00:00Z","limit":10000}
+```
+
+Потоковая загрузка идемпотентна по `stream_id`: после `ingest.commit` повторные
+`ingest.commit`, совместимый `ingest.begin` и идентичные уже закоммиченные
+chunks возвращаются как уже закоммиченные/пропущенные и не применяют данные
+повторно. Закоммиченный stream с другими параметрами или chunks возвращает
+`idempotency_conflict`.
 
 ## Ruby/Rails клиент
 
@@ -415,7 +464,9 @@ gem "karma_client", path: "clients/ruby"
 
 Повторные фрагменты загрузки пропускаются. Фрагменты не по порядку
 отклоняются до применения. Поток привязывается к series, которая пришла в
-первом фрагменте.
+первом фрагменте. Закоммиченные потоки запоминаются надежно, поэтому повторный
+`replace_series` commit не заменит series еще раз после рестарта,
+восстановления из снимка состояния или начальной загрузки репликации.
 
 ## Снимки состояния, WAL и восстановление
 
@@ -569,6 +620,8 @@ WAL-запись.
 * счетчики пакетных чтений и записей;
 * счетчики удаления старых данных и уплотнения;
 * счетчики потоковой загрузки и ее задержка;
+* счетчики записей идемпотентности, hits, conflicts, очистки и
+  закоммиченных ingest streams;
 * счетчики сверки данных и восстановления;
 * отставание репликации, примененный LSN, успешные и ошибочные опросы и
   начальные загрузки.
@@ -612,36 +665,47 @@ socket.close
 среды, сети и профиля нагрузки. Эти скрипты нужны как повторяемые локальные
 проверки, а не как универсальный бенчмарк.
 
-Последние зафиксированные локальные результаты от 5 мая 2026:
+Последние зафиксированные локальные результаты от 29 мая 2026:
 
 | Тест | Режим | Производительность | p95 задержка |
 | --- | --- | ---: | ---: |
-| `single_increment` | внутри процесса, WAL выключен | 289 908 ops/sec | 0.004 ms |
-| `single_sum` | внутри процесса, WAL выключен | 403 080 ops/sec | 0.0026 ms |
-| `series.batch_add` | внутри процесса, WAL выключен | 1 917 010 items/sec | 0.9878 ms |
-| `counter.batch_sum` | внутри процесса, WAL выключен | 2 389 520 key reads/sec | 0.8685 ms |
-| `tcp_single_increment` | TCP, 4 клиента, WAL включен, fsync включен | 12 818 ops/sec | 0.5561 ms |
-| `tcp_single_sum` | TCP, 4 клиента, WAL включен, fsync включен | 41 340 ops/sec | 0.1339 ms |
-| `tcp_series.batch_add` | TCP, 4 клиента, WAL включен, fsync включен | 744 551 items/sec | 2.9103 ms |
-| `tcp_counter.batch_sum` | TCP, 4 клиента, WAL включен, fsync включен | 1 708 312 key reads/sec | 1.5604 ms |
+| `single_increment` | внутри процесса, WAL выключен | 274 908 ops/sec | 0.0048 ms |
+| `single_sum` | внутри процесса, WAL выключен | 406 078 ops/sec | 0.0026 ms |
+| `series.batch_add` | внутри процесса, WAL выключен | 1 940 884 items/sec | 1.0552 ms |
+| `counter.batch_sum` | внутри процесса, WAL выключен | 2 398 552 key reads/sec | 0.8581 ms |
+| `tcp_single_increment` | TCP, 4 клиента, WAL выключен | 34 338 ops/sec | 0.1989 ms |
+| `tcp_single_sum` | TCP, 4 клиента, WAL выключен | 40 097 ops/sec | 0.1241 ms |
+| `tcp_series.batch_add` | TCP, 4 клиента, WAL выключен | 1 642 115 items/sec | 2.0443 ms |
+| `tcp_counter.batch_sum` | TCP, 4 клиента, WAL выключен | 2 023 058 key reads/sec | 2.5341 ms |
+| `tcp_single_increment` | TCP, 4 клиента, WAL включен, fsync выключен | 4 078 ops/sec | 1.3904 ms |
+| `tcp_single_sum` | TCP, 4 клиента, WAL включен, fsync выключен | 38 913 ops/sec | 0.1266 ms |
+| `tcp_series.batch_add` | TCP, 4 клиента, WAL включен, fsync выключен | 970 674 items/sec | 3.6078 ms |
+| `tcp_counter.batch_sum` | TCP, 4 клиента, WAL включен, fsync выключен | 1 797 181 key reads/sec | 2.5988 ms |
+
+Точечная проверка горячего пути идемпотентности: внутри процесса, WAL
+выключен, JSON-запросы подготовлены заранее. `counter.increment` без
+`idempotency_key` обработал около 417 660 ops/sec; с уникальным
+`idempotency_key` - около 226 472 ops/sec. Для at-least-once producers с
+высокой нагрузкой лучше использовать `series.batch_add`, чтобы накладные
+расходы идемпотентности распределялись на много items.
 
 Тест зависимости от объема данных: внутри процесса, WAL выключен, 7 дневных
 bucket-ов на ключ:
 
 | Ключи | Точек данных | Память | Снимок | Пакетное чтение | p95 пакета | Сводка | Снимок | Восстановление |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10 000 | 70 000 | 8.23 MiB | 0.57 MiB | 2 255 027 key reads/sec | 0.8820 ms | 4.59 ms | 4.59 ms | 2.87 ms |
-| 50 000 | 350 000 | 28.48 MiB | 2.86 MiB | 1 778 740 key reads/sec | 0.4863 ms | 33.41 ms | 20.35 ms | 15.18 ms |
-| 100 000 | 700 000 | 47.70 MiB | 5.79 MiB | 1 558 846 key reads/sec | 0.4809 ms | 88.58 ms | 42.81 ms | 32.21 ms |
+| 10 000 | 70 000 | 7.99 MiB | 0.57 MiB | 2 152 874 key reads/sec | 0.8227 ms | 3.79 ms | 4.04 ms | 2.92 ms |
+| 50 000 | 350 000 | 27.66 MiB | 2.86 MiB | 1 831 463 key reads/sec | 0.4508 ms | 29.40 ms | 21.14 ms | 16.16 ms |
+| 100 000 | 700 000 | 46.78 MiB | 5.79 MiB | 1 420 289 key reads/sec | 0.4680 ms | 83.08 ms | 42.00 ms | 32.88 ms |
 
 Профиль высокой кардинальности: внутри процесса, WAL выключен, 356 дневных
 bucket-ов на ключ:
 
 | Ключи | Точек данных | Память | Снимок | Пакетное чтение | p95 пакета | Сводка | Снимок | Восстановление |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10 000 | 3 560 000 | 234.11 MiB | 20.58 MiB | 2 299 570 key reads/sec | 4.4254 ms | 140.71 ms | 80.07 ms | 115.79 ms |
-| 25 000 | 8 900 000 | 570.14 MiB | 51.45 MiB | 1 936 145 key reads/sec | 8.9875 ms | 401.43 ms | 201.91 ms | 323.58 ms |
-| 50 000 | 17 800 000 | 1 114.17 MiB | 102.90 MiB | 1 918 123 key reads/sec | 2.3001 ms | 960.62 ms | 426.69 ms | 561.90 ms |
+| 10 000 | 3 560 000 | 237.08 MiB | 20.58 MiB | 2 207 683 key reads/sec | 4.1449 ms | 149.95 ms | 81.47 ms | 121.35 ms |
+| 25 000 | 8 900 000 | 557.11 MiB | 51.45 MiB | 2 110 358 key reads/sec | 2.2563 ms | 438.43 ms | 196.75 ms | 281.82 ms |
+| 50 000 | 17 800 000 | 1 181.16 MiB | 102.90 MiB | 1 891 176 key reads/sec | 2.5203 ms | 1 009.71 ms | 473.55 ms | 690.07 ms |
 
 Тест репликации в тот же день запускался с `clients=4`, `keys=10000`,
 `batch_size=1000`, `write_batches=100`, `read_rounds=100`,

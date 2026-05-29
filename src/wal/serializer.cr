@@ -22,6 +22,9 @@ module Karma
       json.object do
         json.field "v", 2
         write_operation(json, directive)
+        json.field "idempotency_key", directive.idempotency_key if directive.idempotency_key
+        json.field "fingerprint", directive.fingerprint if directive.fingerprint
+        json.field "idempotency_created_at_unix", directive.idempotency_created_at_unix if directive.idempotency_created_at_unix
       end
     end
 
@@ -92,6 +95,10 @@ module Karma
       when "ingest_abort"
         json.field "op", "ingest.abort"
         json.field "stream_id", directive.stream_id
+      when "idempotency_prune"
+        json.field "op", "idempotency.prune"
+        json.field "before", directive.before_unix
+        json.field "limit", directive.limit unless directive.limit.nil?
       when "delete"
         if directive.key
           json.field "op", "counter.delete_range"

@@ -16,7 +16,8 @@ module KarmaClient
         protocol_version: payload["protocol_version"],
         success: payload.fetch("success"),
         value: payload["response"],
-        error_code: payload["error_code"]
+        error_code: payload["error_code"],
+        idempotent: payload["idempotent"]
       )
     rescue JSON::ParserError => e
       raise ProtocolError.new("Invalid Karma JSON response: #{e.message}", payload: line)
@@ -24,7 +25,7 @@ module KarmaClient
       raise ProtocolError.new("Invalid Karma response envelope: missing #{e.key}", payload: line)
     end
 
-    def initialize(protocol_version:, success:, value:, error_code:)
+    def initialize(protocol_version:, success:, value:, error_code:, idempotent: nil)
       unless [true, false].include?(success)
         raise ProtocolError, "Invalid Karma response envelope: success must be boolean"
       end
@@ -33,6 +34,7 @@ module KarmaClient
       @success = success
       @value = value
       @error_code = error_code
+      @idempotent = idempotent
     end
 
     def success?
@@ -41,6 +43,10 @@ module KarmaClient
 
     def error?
       !success?
+    end
+
+    def idempotent?
+      @idempotent == true
     end
   end
 end

@@ -16,6 +16,7 @@ module Karma
         dump_path = File.join(dump_dir, dump_name)
         Karma::Backup.dump(self, dump_path, tree_name)
       end
+      Karma::Idempotency.dump(dump_dir)
       Karma::Wal.truncate
       Karma::Backup.prune(dump_dir, Karma.config.dump_retention_per_tree)
     end
@@ -47,6 +48,7 @@ module Karma
 
     def self.restore_with_wal(dump_dir) : Cluster
       cluster = restore(dump_dir)
+      Karma::Idempotency.restore(dump_dir)
       Karma::Wal.replay(cluster, dump_dir)
       cluster
     end

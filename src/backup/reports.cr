@@ -29,6 +29,7 @@ module Karma
       {
         dump_count:              dump_paths.size,
         latest_by_tree:          latest_by_tree,
+        idempotency_snapshot:    Karma::Idempotency.info(dump_dir).try(&.to_response),
         last_snapshot_lsn:       latest_by_tree.max_of? { |snapshot| snapshot[:last_lsn] } || 0_u64,
         wal_enabled:             Karma::Wal.enabled?,
         wal_bytes:               File.exists?(wal_path) ? File.size(wal_path) : 0_i64,

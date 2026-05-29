@@ -112,6 +112,23 @@ module Karma
         io << "karma_ingest_chunk_latency_ms #{ingest_metrics[:latency_ms_last]}\n"
         io << "# TYPE karma_ingest_chunk_latency_ms_average gauge\n"
         io << "karma_ingest_chunk_latency_ms_average #{ingest_metrics[:latency_ms_average]}\n"
+        idempotency_metrics = Karma::Idempotency.metrics
+        io << "# TYPE karma_idempotency_records gauge\n"
+        io << "karma_idempotency_records #{idempotency_metrics[:record_count]}\n"
+        io << "# TYPE karma_idempotency_hits_total counter\n"
+        io << "karma_idempotency_hits_total #{idempotency_metrics[:hits]}\n"
+        io << "# TYPE karma_idempotency_conflicts_total counter\n"
+        io << "karma_idempotency_conflicts_total #{idempotency_metrics[:conflicts]}\n"
+        io << "# TYPE karma_idempotency_pruned_total counter\n"
+        io << "karma_idempotency_pruned_total #{idempotency_metrics[:pruned]}\n"
+        io << "# TYPE karma_idempotency_writes_total counter\n"
+        io << "karma_idempotency_writes_total #{idempotency_metrics[:write_count]}\n"
+        io << "# TYPE karma_idempotency_write_latency_ms gauge\n"
+        io << "karma_idempotency_write_latency_ms #{idempotency_metrics[:write_latency_ms_last]}\n"
+        io << "# TYPE karma_idempotency_write_latency_ms_average gauge\n"
+        io << "karma_idempotency_write_latency_ms_average #{idempotency_metrics[:write_latency_ms_avg]}\n"
+        io << "# TYPE karma_idempotency_committed_streams gauge\n"
+        io << "karma_idempotency_committed_streams #{idempotency_metrics[:committed_stream_count]}\n"
       end
     end
   end

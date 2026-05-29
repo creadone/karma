@@ -5,7 +5,8 @@ module Karma
         Karma::Ingest.begin_stream(
           directive.stream_id.not_nil!,
           directive.mode.not_nil!,
-          directive.granularity
+          directive.granularity,
+          Karma::Idempotency.fingerprint(directive)
         )
       end
     end

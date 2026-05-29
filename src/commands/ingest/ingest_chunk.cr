@@ -5,7 +5,8 @@ module Karma
         started_at = Time.monotonic
         stream_id = directive.stream_id.not_nil!
         chunk_seq = directive.chunk_seq.not_nil!
-        status = Karma::Ingest.chunk_status(stream_id, chunk_seq)
+        fingerprint = Karma::Idempotency.fingerprint(directive)
+        status = Karma::Ingest.chunk_status(stream_id, chunk_seq, fingerprint, directive.series_name)
 
         if status[:skipped]
           Karma::Ingest.record_chunk(applied: false, skipped: true, item_count: 0, latency_ms: elapsed_ms(started_at))
@@ -13,6 +14,7 @@ module Karma
             stream_id: stream_id,
             chunk_seq: chunk_seq,
             skipped:   true,
+            committed: status[:committed],
             applied:   0,
             total:     0_u64,
           }
@@ -26,7 +28,7 @@ module Karma
         )
 
         result = apply_items(stream, cluster, series.name, items)
-        Karma::Ingest.mark_chunk(stream_id, chunk_seq)
+        Karma::Ingest.mark_chunk(stream_id, chunk_seq, fingerprint)
         Karma::Ingest.record_chunk(applied: true, skipped: false, item_count: result[:applied], latency_ms: elapsed_ms(started_at))
 
         {

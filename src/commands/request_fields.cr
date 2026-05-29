@@ -109,6 +109,38 @@ module Karma
       stringish_from(object, "event_id")
     end
 
+    private def self.idempotency_key_from(object : Hash(String, JSON::Any)) : String?
+      stringish_from(object, "idempotency_key")
+    end
+
+    private def self.fingerprint_from(object : Hash(String, JSON::Any)) : String?
+      stringish_from(object, "fingerprint")
+    end
+
+    private def self.idempotency_created_at_unix_from(object : Hash(String, JSON::Any)) : Int64?
+      value = object["idempotency_created_at_unix"]?
+      return nil unless value
+
+      timestamp = value.as_i64? || raise Karma::Error.new("validation_error", "Field idempotency_created_at_unix must be an integer")
+      raise Karma::Error.new("validation_error", "Field idempotency_created_at_unix must be greater than or equal to 0") if timestamp < 0
+
+      timestamp
+    end
+
+    private def self.before_unix_from(object : Hash(String, JSON::Any)) : Int64
+      value = object["before"]? || raise Karma::Error.new("validation_error", "Field before is required")
+      if timestamp = value.as_i64?
+        raise Karma::Error.new("validation_error", "Field before must be greater than or equal to 0") if timestamp < 0
+
+        return timestamp
+      end
+
+      text = value.as_s? || raise Karma::Error.new("validation_error", "Field before must be an integer or ISO8601 timestamp")
+      Time.parse_rfc3339(text).to_unix
+    rescue e : Time::Format::Error
+      raise Karma::Error.new("validation_error", "Field before must be an ISO8601 timestamp")
+    end
+
     private def self.stringish_from(object : Hash(String, JSON::Any), field : String) : String?
       return nil unless value = object[field]?
 

@@ -112,6 +112,68 @@ class KarmaClientTest < Minitest::Test
     assert_equal "Tree \"links\" not found", response.value
   end
 
+  def test_idempotency_fields_are_sent_and_response_flag_is_exposed
+    @server = KarmaClientTestServer.new do |_request|
+      success_response({ "applied" => 1 }, idempotent: true)
+    end
+    @client = KarmaClient::Client.new(host: "127.0.0.1", port: @server.port)
+
+    response = @client.request(
+      "series.batch_add",
+      series: "links",
+      items: [[42, 20260505, 10]],
+      idempotency_key: "event-1",
+      fingerprint: "fp-1"
+    )
+
+    request = @server.requests.pop
+    assert response.idempotent?
+    assert_equal "event-1", request["idempotency_key"]
+    assert_equal "fp-1", request["fingerprint"]
+  end
+
+  def test_idempotency_conflict_error_mapping
+    @server = KarmaClientTestServer.new do |_request|
+      error_response("idempotency_conflict", "Idempotency key was already used")
+    end
+    @client = KarmaClient::Client.new(host: "127.0.0.1", port: @server.port)
+
+    error = assert_raises(KarmaClient::IdempotencyConflictError) do
+      @client.increment(series: "links", key: 42, bucket: 20260505, idempotency_key: "event-1")
+    end
+
+    assert_equal "idempotency_conflict", error.code
+  end
+
+  def test_idempotency_prune_command
+    @server = KarmaClientTestServer.new do |_request|
+      success_response({ "deleted" => 3 })
+    end
+    @client = KarmaClient::Client.new(host: "127.0.0.1", port: @server.port)
+
+    result = @client.idempotency_prune(before: Time.utc(2026, 5, 29), limit: 100)
+
+    request = @server.requests.pop
+    assert_equal({ "deleted" => 3 }, result)
+    assert_equal "idempotency.prune", request["op"]
+    assert_equal "2026-05-29T00:00:00Z", request["before"]
+    assert_equal 100, request["limit"]
+  end
+
+  def test_idempotency_prune_accepts_unix_timestamp
+    @server = KarmaClientTestServer.new do |_request|
+      success_response({ "deleted" => 3 })
+    end
+    @client = KarmaClient::Client.new(host: "127.0.0.1", port: @server.port)
+
+    result = @client.idempotency_prune(before: 1_779_999_999, limit: 100)
+
+    request = @server.requests.pop
+    assert_equal({ "deleted" => 3 }, result)
+    assert_equal 1_779_999_999, request["before"]
+    assert_equal 100, request["limit"]
+  end
+
   def test_pool_reuses_configured_clients
     @server = KarmaClientTestServer.new do |_request|
       success_response("pong")
@@ -154,13 +216,14 @@ class KarmaClientTest < Minitest::Test
 
   private
 
-  def success_response(value)
+  def success_response(value, idempotent: nil)
     {
       "protocol_version" => 2,
       "success" => true,
       "response" => value,
+      "idempotent" => idempotent,
       "error_code" => nil
-    }
+    }.compact
   end
 
   def error_response(code, message)

@@ -11,6 +11,7 @@ module Karma
 
     def self.stats(cluster : Cluster)
       ingest_metrics = Karma::Ingest.metrics
+      idempotency_metrics = Karma::Idempotency.metrics
       replication = Karma::Replication.status
       {
         uptime_seconds:                          uptime_seconds,
@@ -70,6 +71,14 @@ module Karma
         ingest_items_applied:                    ingest_metrics[:items_applied],
         ingest_latency_ms_last:                  ingest_metrics[:latency_ms_last],
         ingest_latency_ms_avg:                   ingest_metrics[:latency_ms_average],
+        idempotency_record_count:                idempotency_metrics[:record_count],
+        idempotency_hits:                        idempotency_metrics[:hits],
+        idempotency_conflicts:                   idempotency_metrics[:conflicts],
+        idempotency_pruned:                      idempotency_metrics[:pruned],
+        idempotency_write_count:                 idempotency_metrics[:write_count],
+        idempotency_write_latency_ms_last:       idempotency_metrics[:write_latency_ms_last],
+        idempotency_write_latency_ms_avg:        idempotency_metrics[:write_latency_ms_avg],
+        idempotency_committed_stream_count:      idempotency_metrics[:committed_stream_count],
       }
     end
 

@@ -109,6 +109,38 @@ KarmaClient.with_client do |karma|
 end
 ```
 
+Idempotent writes:
+
+```ruby
+response = KarmaClient.with_client do |karma|
+  karma.request(
+    "counter.increment",
+    series: "links",
+    key: 42,
+    bucket: Date.current,
+    value: 1,
+    idempotency_key: "click-event-123"
+  )
+end
+
+response.value
+response.idempotent?
+```
+
+Convenience write methods accept `idempotency_key:` and optional
+`fingerprint:` for server-side fingerprint assertion: `increment`,
+`decrement`, `batch_add`, `batch_set`, `reset_counter`, `batch_reset`,
+`reset_series`, `delete_range`, and `batch_delete_range`. Reusing a key with a
+different payload raises `KarmaClient::IdempotencyConflictError`.
+
+Prune expired idempotency records:
+
+```ruby
+KarmaClient.with_client do |karma|
+  karma.idempotency_prune(before: Time.now.utc - 7 * 24 * 60 * 60, limit: 10_000)
+end
+```
+
 For one-off scripts, instantiate a client directly:
 
 ```ruby
@@ -140,8 +172,9 @@ Transport and local validation errors are separate:
 * `KarmaClient::ProtocolError`;
 * `KarmaClient::PoolTimeout`.
 
-The client does not retry mutating commands automatically. Counter increments
-are not idempotent unless your application adds its own idempotency layer.
+The client does not retry mutating commands automatically. For retryable write
+workflows, pass a stable `idempotency_key:` that comes from the source event or
+job id.
 
 ## Generic Protocol Access
 
@@ -163,4 +196,5 @@ end
 response.success?
 response.value
 response.error_code
+response.idempotent?
 ```

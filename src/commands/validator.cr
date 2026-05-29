@@ -6,6 +6,11 @@ module Karma
       when "replication_status"
       when "replication_entries"
         require_after_lsn(directive)
+      when "idempotency_prune"
+        require_before_unix(directive)
+        require_limit(directive, default: 10_000, max: 100_000) if directive.limit
+      when "idempotency_snapshot_fetch_chunk"
+        require_limit(directive, default: Karma::Backup::SNAPSHOT_CHUNK_DEFAULT_BYTES, max: Karma::Backup::SNAPSHOT_CHUNK_MAX_BYTES)
       when "snapshot_info"
       when "snapshot_fetch"
         require_tree_name(directive)
@@ -65,7 +70,10 @@ module Karma
         require_tree_name(directive)
         require_chunk_seq(directive)
         require_ingest_items(directive)
-      when "ingest_commit", "ingest_abort"
+      when "ingest_commit"
+        require_stream_id(directive)
+        Karma::Ingest.validate_stream_exists!(directive.stream_id.not_nil!) unless Karma::Idempotency.committed_stream?(directive.stream_id.not_nil!)
+      when "ingest_abort"
         require_stream_id(directive)
         Karma::Ingest.validate_stream_exists!(directive.stream_id.not_nil!)
       when "reconciliation_report"

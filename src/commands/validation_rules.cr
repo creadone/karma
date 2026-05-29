@@ -69,8 +69,17 @@ module Karma
       end
 
       begin
-        stream = Karma::Ingest.validate_chunk!(directive.stream_id.not_nil!, directive.chunk_seq.not_nil!)
-        Karma::Ingest.bind_series!(stream, directive.tree_name.not_nil!) if directive.tree_name
+        fingerprint = Karma::Idempotency.fingerprint(directive)
+        status = Karma::Ingest.chunk_status(
+          directive.stream_id.not_nil!,
+          directive.chunk_seq.not_nil!,
+          fingerprint,
+          directive.tree_name.not_nil!
+        )
+        unless status[:skipped]
+          stream = Karma::Ingest.validate_chunk!(directive.stream_id.not_nil!, directive.chunk_seq.not_nil!)
+          Karma::Ingest.bind_series!(stream, directive.tree_name.not_nil!) if directive.tree_name
+        end
       rescue e : Karma::Error
         Karma::Ingest.record_rejected_chunk
         raise e
@@ -78,6 +87,11 @@ module Karma
     end
 
     private def self.require_ingest_items(directive : Directive) : Nil
+      if Karma::Idempotency.committed_stream?(directive.stream_id.not_nil!)
+        require_items(directive, allow_zero: true)
+        return
+      end
+
       stream = Karma::Ingest.validate_stream_exists!(directive.stream_id.not_nil!)
       require_items(directive, allow_zero: stream.mode != "add")
     end
@@ -105,6 +119,10 @@ module Karma
     private def self.require_after_lsn(directive : Directive) : Nil
       raise Karma::Error.new("validation_error", "Field after_lsn is required") if directive.after_lsn.nil?
       require_limit(directive, default: 1_000, max: 10_000)
+    end
+
+    private def self.require_before_unix(directive : Directive) : Nil
+      raise Karma::Error.new("validation_error", "Field before is required") if directive.before_unix.nil?
     end
 
     private def self.require_snapshot_chunk(directive : Directive) : Nil

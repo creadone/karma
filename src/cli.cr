@@ -96,6 +96,14 @@ module Karma
           Karma.config.replication_batch_size = int_flag(count, "--replication-batch-size")
         end
 
+        parser.on("--idempotency-max-records=count", "Maximum idempotency records to keep (default: #{Karma.config.idempotency_max_records})") do |count|
+          Karma.config.idempotency_max_records = int_flag(count, "--idempotency-max-records")
+        end
+
+        parser.on("--idempotency-max-age-seconds=seconds", "Maximum idempotency record age; 0 disables age pruning (default: #{Karma.config.idempotency_max_age_seconds})") do |seconds|
+          Karma.config.idempotency_max_age_seconds = int_flag(seconds, "--idempotency-max-age-seconds")
+        end
+
         parser.on("--log=flag", "Enable structured JSON logs (default: #{Karma.config.log})") do |flag|
           Karma.config.log = bool_flag(flag, "--log")
         end

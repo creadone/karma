@@ -66,7 +66,12 @@ module Karma
 
     def self.restore_lsn(dump_dir) : UInt64
       snapshots = latest_snapshot_metadata_by_tree(dump_dir)
-      return 0_u64 if snapshots.empty?
+      if snapshots.empty?
+        idempotency_snapshot = Karma::Idempotency.info(dump_dir)
+        return idempotency_snapshot.last_lsn if idempotency_snapshot && idempotency_snapshot.last_lsn > 0_u64
+
+        return 0_u64
+      end
 
       snapshots.min_of(&.last_lsn)
     end

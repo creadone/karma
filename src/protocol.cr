@@ -4,7 +4,7 @@ module Karma
   module Protocol
     VERSION = 1_u32
 
-    def self.success(response, version = VERSION) : String
+    def self.success(response, version = VERSION, idempotent : Bool? = nil) : String
       JSON.build do |json|
         json.object do
           json.field "protocol_version", version
@@ -12,6 +12,7 @@ module Karma
           json.field "response" do
             response.to_json(json)
           end
+          json.field "idempotent", idempotent unless idempotent.nil?
           json.field "error_code", nil
         end
       end

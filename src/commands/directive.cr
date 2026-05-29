@@ -40,6 +40,10 @@ module Karma
       property source : String?
       property source_offset : String?
       property event_id : String?
+      property idempotency_key : String?
+      property fingerprint : String?
+      property idempotency_created_at_unix : Int64?
+      property before_unix : Int64?
       property protocol_version : UInt32 = 1_u32
 
       def initialize(
@@ -68,6 +72,10 @@ module Karma
         @source : String? = nil,
         @source_offset : String? = nil,
         @event_id : String? = nil,
+        @idempotency_key : String? = nil,
+        @fingerprint : String? = nil,
+        @idempotency_created_at_unix : Int64? = nil,
+        @before_unix : Int64? = nil,
         @protocol_version : UInt32 = 1_u32,
       )
       end

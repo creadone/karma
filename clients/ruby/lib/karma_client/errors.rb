@@ -64,6 +64,7 @@ module KarmaClient
               when "request_too_large" then RequestTooLargeError
               when "response_too_large" then ResponseTooLargeError
               when "query_timeout" then QueryTimeoutError
+              when "idempotency_conflict" then IdempotencyConflictError
               else ServerError
               end
 
@@ -106,5 +107,8 @@ module KarmaClient
   end
 
   class QueryTimeoutError < ServerError
+  end
+
+  class IdempotencyConflictError < ServerError
   end
 end
