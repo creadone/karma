@@ -43,7 +43,6 @@ module Karma
         memory_bytes:                            GC.stats.heap_size,
         command_count:                           command_count,
         error_count:                             error_count,
-        legacy_request_count:                    legacy_request_count,
         query_timeout_count:                     query_timeout_count,
         batch_read_count:                        batch_read_count,
         batch_read_key_count:                    batch_read_key_count,

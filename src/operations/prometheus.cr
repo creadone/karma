@@ -55,8 +55,6 @@ module Karma
         io << "karma_commands_total #{command_count}\n"
         io << "# TYPE karma_errors_total counter\n"
         io << "karma_errors_total #{error_count}\n"
-        io << "# TYPE karma_protocol_v1_requests_total counter\n"
-        io << "karma_protocol_v1_requests_total #{legacy_request_count}\n"
         io << "# TYPE karma_query_timeouts_total counter\n"
         io << "karma_query_timeouts_total #{query_timeout_count}\n"
         io << "# TYPE karma_batch_reads_total counter\n"

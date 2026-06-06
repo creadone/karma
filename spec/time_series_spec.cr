@@ -1,7 +1,7 @@
 require "./spec_helper"
 
 describe Karma::TimeSeries do
-  it "wraps v1 tree names as series names" do
+  it "wraps tree aliases as series names" do
     series = Karma::TimeSeries::Series.new("links")
 
     series.name.should eq("links")
@@ -42,14 +42,15 @@ describe Karma::TimeSeries do
     end
   end
 
-  it "maps v1 directive fields into time-series concepts" do
-    directive = Karma::Commands::Directive.from_json({
-      command:   "sum",
+  it "maps directive fields into time-series concepts" do
+    directive = Karma::Commands::Directive.new(
+      "sum",
       tree_name: "links",
-      key:       42_u64,
+      key: 42_u64,
       time_from: 20230201_u64,
-      time_to:   20230203_u64,
-    }.to_json)
+      time_to: 20230203_u64,
+      protocol_version: 2_u32
+    )
 
     directive.series.name.should eq("links")
     directive.series_key.value.should eq(42_u64)

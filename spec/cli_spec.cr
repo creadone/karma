@@ -10,6 +10,8 @@ CLI_ENV_KEYS = %w[
   KARMA_WAL
   KARMA_WAL_FSYNC
   KARMA_WAL_SEGMENT_BYTES
+  KARMA_WAL_BATCH_SIZE
+  KARMA_WAL_BATCH_WAIT_MICROSECONDS
   KARMA_MAX_REQUEST_BYTES
   KARMA_MAX_RESPONSE_BYTES
   KARMA_READ_TIMEOUT_SECONDS
@@ -43,6 +45,8 @@ describe Karma::Cli do
       c.wal = true
       c.wal_fsync = true
       c.wal_segment_bytes = 64 * 1024 * 1024
+      c.wal_batch_size = 1_024
+      c.wal_batch_wait_microseconds = 0
       c.max_request_bytes = 4096
       c.max_response_bytes = 1_048_576
       c.read_timeout_seconds = 5
@@ -68,6 +72,8 @@ describe Karma::Cli do
       "--wal=false",
       "--wal-fsync=false",
       "--wal-segment-bytes=123456",
+      "--wal-batch-size=256",
+      "--wal-batch-wait-us=50",
       "--max-request-bytes=8192",
       "--max-response-bytes=2048",
       "--read-timeout=3",
@@ -94,6 +100,8 @@ describe Karma::Cli do
     Karma.config.wal.should be_false
     Karma.config.wal_fsync.should be_false
     Karma.config.wal_segment_bytes.should eq(123_456)
+    Karma.config.wal_batch_size.should eq(256)
+    Karma.config.wal_batch_wait_microseconds.should eq(50)
     Karma.config.max_request_bytes.should eq(8192)
     Karma.config.max_response_bytes.should eq(2048)
     Karma.config.read_timeout_seconds.should eq(3)
@@ -120,6 +128,8 @@ describe Karma::Cli do
       c.wal = true
       c.wal_fsync = true
       c.wal_segment_bytes = 64 * 1024 * 1024
+      c.wal_batch_size = 1_024
+      c.wal_batch_wait_microseconds = 0
       c.max_request_bytes = 4096
       c.max_response_bytes = 1_048_576
       c.read_timeout_seconds = 5
@@ -150,6 +160,8 @@ describe Karma::Cli do
       c.wal = true
       c.wal_fsync = true
       c.wal_segment_bytes = 64 * 1024 * 1024
+      c.wal_batch_size = 1_024
+      c.wal_batch_wait_microseconds = 0
       c.max_request_bytes = 4096
       c.max_response_bytes = 1_048_576
       c.read_timeout_seconds = 5
@@ -176,6 +188,8 @@ describe Karma::Cli do
     ENV["KARMA_WAL"] = "false"
     ENV["KARMA_WAL_FSYNC"] = "false"
     ENV["KARMA_WAL_SEGMENT_BYTES"] = "654321"
+    ENV["KARMA_WAL_BATCH_SIZE"] = "128"
+    ENV["KARMA_WAL_BATCH_WAIT_MICROSECONDS"] = "25"
     ENV["KARMA_MAX_REQUEST_BYTES"] = "8192"
     ENV["KARMA_MAX_RESPONSE_BYTES"] = "16384"
     ENV["KARMA_READ_TIMEOUT_SECONDS"] = "8"
@@ -203,6 +217,8 @@ describe Karma::Cli do
     Karma.config.wal.should be_true
     Karma.config.wal_fsync.should be_false
     Karma.config.wal_segment_bytes.should eq(654_321)
+    Karma.config.wal_batch_size.should eq(128)
+    Karma.config.wal_batch_wait_microseconds.should eq(25)
     Karma.config.max_request_bytes.should eq(8192)
     Karma.config.max_response_bytes.should eq(16_384)
     Karma.config.read_timeout_seconds.should eq(8)
@@ -230,6 +246,8 @@ describe Karma::Cli do
       c.wal = true
       c.wal_fsync = true
       c.wal_segment_bytes = 64 * 1024 * 1024
+      c.wal_batch_size = 1_024
+      c.wal_batch_wait_microseconds = 0
       c.max_request_bytes = 4096
       c.max_response_bytes = 1_048_576
       c.read_timeout_seconds = 5
@@ -281,6 +299,8 @@ describe Karma::Cli do
       c.wal = true
       c.wal_fsync = true
       c.wal_segment_bytes = 64 * 1024 * 1024
+      c.wal_batch_size = 1_024
+      c.wal_batch_wait_microseconds = 0
       c.max_request_bytes = 4096
       c.max_response_bytes = 1_048_576
       c.read_timeout_seconds = 5

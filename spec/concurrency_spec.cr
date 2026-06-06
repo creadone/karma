@@ -1,7 +1,7 @@
 require "./spec_helper"
 
 describe Karma::State do
-  it "serializes concurrent command execution" do
+  it "coordinates concurrent point writes" do
     dump_dir = File.expand_path(".spec_concurrent_commands_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }
     cluster = Karma::Cluster.new
@@ -10,9 +10,10 @@ describe Karma::State do
     100.times do
       spawn do
         Karma::Commands.call({
-          command:   "increment",
-          tree_name: "articles",
-          key:       42_u64,
+          v:      2,
+          op:     "counter.increment",
+          series: "articles",
+          key:    42_u64,
         }.to_json, cluster)
         done.send(nil)
       end
@@ -32,16 +33,17 @@ describe Karma::State do
     100.times do
       spawn do
         Karma::Commands.call({
-          command:   "increment",
-          tree_name: "articles",
-          key:       42_u64,
+          v:      2,
+          op:     "counter.increment",
+          series: "articles",
+          key:    42_u64,
         }.to_json, cluster)
         done.send(nil)
       end
     end
 
     spawn do
-      Karma::Commands.call({command: "dump_all"}.to_json, cluster)
+      Karma::Commands.call({v: 2, op: "snapshot.create_all"}.to_json, cluster)
       done.send(nil)
     end
 

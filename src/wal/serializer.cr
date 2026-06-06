@@ -32,21 +32,21 @@ module Karma
       case directive.command
       when "create"
         json.field "op", "tree.create"
-        json.field "tree", directive.tree_name
+        json.field "series", directive.tree_name
       when "drop"
         json.field "op", "tree.drop"
-        json.field "tree", directive.tree_name
+        json.field "series", directive.tree_name
       when "increment"
         json.field "op", "counter.increment"
-        json.field "tree", directive.tree_name
+        json.field "series", directive.tree_name
         json.field "key", directive.key
-        json.field "date", directive.date || Karma::TimeSeries::Bucket.today.value
+        json.field "bucket", directive.date || Karma::TimeSeries::Bucket.today.value
         json.field "value", directive.value || 1_u64
       when "decrement"
         json.field "op", "counter.decrement"
-        json.field "tree", directive.tree_name
+        json.field "series", directive.tree_name
         json.field "key", directive.key
-        json.field "date", directive.date || Karma::TimeSeries::Bucket.today.value
+        json.field "bucket", directive.date || Karma::TimeSeries::Bucket.today.value
         json.field "value", directive.value || 1_u64
       when "batch_add"
         json.field "op", "series.batch_add"
@@ -102,22 +102,22 @@ module Karma
       when "delete"
         if directive.key
           json.field "op", "counter.delete_range"
-          json.field "tree", directive.tree_name
+          json.field "series", directive.tree_name
           json.field "key", directive.key
           write_range(json, directive)
         else
           json.field "op", "tree.delete_range"
-          json.field "tree", directive.tree_name
+          json.field "series", directive.tree_name
           write_range(json, directive)
         end
       when "reset"
         if directive.key
           json.field "op", "counter.reset"
-          json.field "tree", directive.tree_name
+          json.field "series", directive.tree_name
           json.field "key", directive.key
         else
           json.field "op", "tree.reset"
-          json.field "tree", directive.tree_name
+          json.field "series", directive.tree_name
         end
       else
         raise Karma::Error.new("validation_error", "Cannot serialize #{directive.command} to WAL")

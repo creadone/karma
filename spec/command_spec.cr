@@ -5,9 +5,10 @@ describe Karma::Commands do
     cluster = Karma::Cluster.new
 
     response = Karma::Commands.call({
-      command:   "sum",
-      tree_name: "missing",
-      key:       42_u64,
+      v:      2,
+      op:     "counter.sum",
+      series: "missing",
+      key:    42_u64,
     }.to_json, cluster)
 
     parsed = expect_error(response, "not_found")
@@ -19,11 +20,11 @@ describe Karma::Commands do
     cluster = Karma::Cluster.new
 
     response = Karma::Commands.call({
-      command:   "find",
-      tree_name: "missing",
-      key:       42_u64,
-      time_from: 20230201_u64,
-      time_to:   20230202_u64,
+      v:      2,
+      op:     "counter.series",
+      series: "missing",
+      key:    42_u64,
+      range:  {from: 20230201_u64, to: 20230202_u64},
     }.to_json, cluster)
 
     parsed = expect_error(response, "not_found")
@@ -35,21 +36,31 @@ describe Karma::Commands do
     cluster = Karma::Cluster.new
 
     response = Karma::Commands.call({
-      command: "increment",
-      key:     42_u64,
+      v:   2,
+      op:  "counter.increment",
+      key: 42_u64,
     }.to_json, cluster)
 
     parsed = expect_error(response, "validation_error")
-    parsed["response"].as_s.should eq("Field tree_name is required")
+    parsed["response"].as_s.should eq("Field tree or series is required")
   end
 
   it "returns stable unknown command errors" do
     cluster = Karma::Cluster.new
 
-    response = Karma::Commands.call({command: "nope"}.to_json, cluster)
+    response = Karma::Commands.call({v: 2, op: "nope"}.to_json, cluster)
 
     parsed = expect_error(response, "unknown_command")
-    parsed["response"].as_s.should eq("Unknown command nope")
+    parsed["response"].as_s.should eq("Unknown op nope")
+  end
+
+  it "rejects pre-1.0 protocol payloads" do
+    cluster = Karma::Cluster.new
+
+    response = Karma::Commands.call({command: "ping"}.to_json, cluster)
+
+    parsed = expect_error(response, "unsupported_protocol")
+    parsed["response"].as_s.should eq("Karma 1.0 accepts only protocol v2 requests with field v=2")
   end
 
   it "returns stable invalid JSON errors" do
@@ -82,7 +93,7 @@ describe Karma::Commands do
     Karma.configure { |c| c.auth_token = "secret" }
     cluster = Karma::Cluster.new
 
-    response = Karma::Commands.call({command: "ping"}.to_json, cluster)
+    response = Karma::Commands.call({v: 2, op: "system.ping"}.to_json, cluster)
 
     expect_error(response, "unauthorized")
   ensure
@@ -93,7 +104,7 @@ describe Karma::Commands do
     Karma.configure { |c| c.auth_token = "secret" }
     cluster = Karma::Cluster.new
 
-    response = Karma::Commands.call({command: "ping", token: "secret"}.to_json, cluster)
+    response = Karma::Commands.call({v: 2, op: "system.ping", token: "secret"}.to_json, cluster)
 
     parsed = expect_success(response)
     parsed["response"].as_s.should eq("pong")

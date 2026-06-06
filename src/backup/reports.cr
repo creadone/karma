@@ -11,10 +11,9 @@ module Karma
         trees:                     cluster.tree_count,
         keys:                      cluster.key_count,
         snapshot_metadata_checked: snapshot_report[:checked],
-        legacy_snapshot_count:     snapshot_report[:legacy],
+        snapshot_missing_metadata: snapshot_report[:missing_metadata],
         restore_snapshot_lsn:      snapshot_report[:restore_lsn],
         wal_entries_checked:       wal_report[:entries],
-        wal_legacy_entries:        wal_report[:legacy_entries],
         wal_first_lsn:             wal_report[:first_lsn],
         wal_last_lsn:              wal_report[:last_lsn],
         wal_lsn_file:              wal_report[:lsn_file],
@@ -39,13 +38,13 @@ module Karma
 
     private def self.verify_snapshot_metadata(dump_dir)
       checked = 0
-      legacy = 0
+      missing_metadata = 0
       dump_paths = dumps(dump_dir)
 
       dump_paths.each do |path|
         metadata_path = metadata_path(path)
         unless File.exists?(metadata_path)
-          legacy += 1
+          missing_metadata += 1
           next
         end
 
@@ -67,10 +66,10 @@ module Karma
 
       restore_lsn = verify_latest_snapshot_lsn!(dump_dir)
       {
-        dump_count:  dump_paths.size,
-        checked:     checked,
-        legacy:      legacy,
-        restore_lsn: restore_lsn,
+        dump_count:       dump_paths.size,
+        checked:          checked,
+        missing_metadata: missing_metadata,
+        restore_lsn:      restore_lsn,
       }
     end
 
@@ -95,7 +94,6 @@ module Karma
       first_lsn : UInt64? = nil
       last_lsn = 0_u64
       entries = 0
-      legacy_entries = 0
 
       wal_paths.each do |wal_path|
         line_number = 0
@@ -108,11 +106,7 @@ module Karma
           entry = object["entry"]?
 
           if lsn.nil? || entry.nil?
-            legacy_entries += 1
-            if snapshot_lsn > 0
-              raise Karma::Error.new("validation_error", "Legacy WAL entry at #{wal_path}:#{line_number} cannot be verified after snapshot LSN #{snapshot_lsn}")
-            end
-            next
+            raise Karma::Error.new("validation_error", "WAL entry at #{wal_path}:#{line_number} is missing v2 LSN envelope")
           end
 
           if lsn <= snapshot_lsn
@@ -134,22 +128,20 @@ module Karma
 
       verify_wal_lsn_file!(lsn_file, snapshot_lsn, last_lsn)
       {
-        entries:        entries,
-        legacy_entries: legacy_entries,
-        first_lsn:      first_lsn || 0_u64,
-        last_lsn:       last_lsn,
-        lsn_file:       lsn_file || 0_u64,
+        entries:   entries,
+        first_lsn: first_lsn || 0_u64,
+        last_lsn:  last_lsn,
+        lsn_file:  lsn_file || 0_u64,
       }
     end
 
     private def self.empty_wal_report(lsn_file : UInt64?, snapshot_lsn : UInt64)
       verify_wal_lsn_file!(lsn_file, snapshot_lsn, 0_u64)
       {
-        entries:        0,
-        legacy_entries: 0,
-        first_lsn:      0_u64,
-        last_lsn:       0_u64,
-        lsn_file:       lsn_file || 0_u64,
+        entries:   0,
+        first_lsn: 0_u64,
+        last_lsn:  0_u64,
+        lsn_file:  lsn_file || 0_u64,
       }
     end
 

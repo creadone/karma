@@ -7,9 +7,10 @@ describe Karma::Wal do
     cluster = Karma::Cluster.new
 
     Karma::Commands.call({
-      command:   "increment",
-      tree_name: "articles",
-      key:       42_u64,
+      v:      2,
+      op:     "counter.increment",
+      series: "articles",
+      key:    42_u64,
     }.to_json, cluster)
 
     lines = File.read_lines(Karma::Wal.path(dump_dir))
@@ -19,9 +20,9 @@ describe Karma::Wal do
     entry["lsn"].as_i.should eq(1)
     entry["entry"]["v"].as_i.should eq(2)
     entry["entry"]["op"].as_s.should eq("counter.increment")
-    entry["entry"].as_h.has_key?("date").should be_true
+    entry["entry"].as_h.has_key?("bucket").should be_true
     entry["entry"]["value"].as_i.should eq(1)
-    File.read(Karma::Wal.lsn_path(dump_dir)).strip.should eq("1")
+    Karma::Wal.current_lsn(dump_dir).should eq(1_u64)
   end
 
   it "increments and persists WAL LSNs" do
@@ -35,7 +36,41 @@ describe Karma::Wal do
     lines = File.read_lines(Karma::Wal.path(dump_dir)).map { |line| JSON.parse(line) }
     lines.map { |line| line["lsn"].as_i }.should eq([1, 2])
     Karma::Wal.current_lsn(dump_dir).should eq(2_u64)
-    File.read(Karma::Wal.lsn_path(dump_dir)).strip.should eq("2")
+  end
+
+  it "keeps LSNs monotonic when concurrent appends are batched" do
+    dump_dir = File.expand_path(".spec_wal_batched_appends_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.wal_batch_size = 64
+      c.wal_batch_wait_microseconds = 1_000
+    end
+    cluster = Karma::Cluster.new
+    done = Channel(Nil).new
+    writes = 64
+
+    writes.times do |index|
+      spawn do
+        Karma::Commands.call({v: 2, op: "counter.increment", series: "series-#{index}", key: index.to_u64}.to_json, cluster)
+        done.send(nil)
+      end
+    end
+
+    writes.times { done.receive }
+
+    lines = File.read_lines(Karma::Wal.path(dump_dir)).map { |line| JSON.parse(line) }
+    lines.map { |line| line["lsn"].as_i }.should eq((1..writes).to_a)
+    Karma::Wal.current_lsn(dump_dir).should eq(writes.to_u64)
+
+    restored = Karma::Cluster.restore_with_wal(dump_dir)
+    writes.times do |index|
+      restored.get("series-#{index}").sum(index.to_u64).should eq(1_u64)
+    end
+  ensure
+    Karma.configure do |c|
+      c.wal_batch_size = 1_024
+      c.wal_batch_wait_microseconds = 0
+    end
   end
 
   it "reads WAL entries after LSN with limit" do
@@ -352,15 +387,15 @@ describe Karma::Wal do
     Karma::Wal.segment_paths(dump_dir).should be_empty
     index_paths.each { |index_path| File.exists?(index_path).should be_false }
     File.read(Karma::Wal.path(dump_dir)).should be_empty
-    File.read(Karma::Wal.lsn_path(dump_dir)).strip.should eq("2")
+    Karma::Wal.current_lsn(dump_dir).should eq(2_u64)
 
     restored = Karma::Cluster.restore_with_wal(dump_dir)
     restored.get("articles").sum(41_u64).should eq(1_u64)
     restored.get("articles").sum(42_u64).should eq(1_u64)
   end
 
-  it "skips legacy WAL entries when reading entries after LSN" do
-    dump_dir = File.expand_path(".spec_wal_entries_legacy_#{Time.local.to_unix_ms}")
+  it "skips unwrapped WAL entries when reading entries after LSN" do
+    dump_dir = File.expand_path(".spec_wal_entries_unwrapped_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }
     Dir.mkdir_p(dump_dir)
     File.write(Karma::Wal.path(dump_dir), {
@@ -379,9 +414,10 @@ describe Karma::Wal do
     cluster = Karma::Cluster.new
 
     Karma::Commands.call({
-      command:   "increment",
-      tree_name: "articles",
-      key:       42_u64,
+      v:      2,
+      op:     "counter.increment",
+      series: "articles",
+      key:    42_u64,
     }.to_json, cluster)
 
     restored = Karma::Cluster.restore_with_wal(dump_dir)
@@ -411,9 +447,10 @@ describe Karma::Wal do
     cluster = Karma::Cluster.new
 
     Karma::Commands.call({
-      command:   "increment",
-      tree_name: "articles",
-      key:       42_u64,
+      v:      2,
+      op:     "counter.increment",
+      series: "articles",
+      key:    42_u64,
     }.to_json, cluster)
     File.read(Karma::Wal.path(dump_dir)).should_not be_empty
 
@@ -439,15 +476,15 @@ describe Karma::Wal do
     entry = JSON.parse(lines.first)
     entry["lsn"].as_i.should eq(2)
     entry["entry"]["key"].as_i.should eq(42)
-    File.read(Karma::Wal.lsn_path(dump_dir)).strip.should eq("2")
+    Karma::Wal.current_lsn(dump_dir).should eq(2_u64)
 
     restored = Karma::Cluster.restore_with_wal(dump_dir)
     restored.get("articles").sum(41_u64).should eq(1_u64)
     restored.get("articles").sum(42_u64).should eq(1_u64)
   end
 
-  it "replays legacy v2 WAL entries without LSN envelope" do
-    dump_dir = File.expand_path(".spec_wal_legacy_v2_#{Time.local.to_unix_ms}")
+  it "rejects unwrapped v2 WAL entries during restore" do
+    dump_dir = File.expand_path(".spec_wal_unwrapped_v2_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }
     Dir.mkdir_p(dump_dir)
     File.write(Karma::Wal.path(dump_dir), {
@@ -458,9 +495,9 @@ describe Karma::Wal do
       value: 3_u64,
     }.to_json + "\n")
 
-    restored = Karma::Cluster.restore_with_wal(dump_dir)
-
-    restored.get("articles").sum(42_u64).should eq(3_u64)
+    expect_raises(Karma::Error, /WAL entry without v2 LSN envelope/) do
+      Karma::Cluster.restore_with_wal(dump_dir)
+    end
   end
 
   it "can disable WAL persistence" do
@@ -472,9 +509,10 @@ describe Karma::Wal do
     cluster = Karma::Cluster.new
 
     Karma::Commands.call({
-      command:   "increment",
-      tree_name: "articles",
-      key:       42_u64,
+      v:      2,
+      op:     "counter.increment",
+      series: "articles",
+      key:    42_u64,
     }.to_json, cluster)
 
     File.exists?(Karma::Wal.path(dump_dir)).should be_false
@@ -491,9 +529,10 @@ describe Karma::Wal do
     cluster = Karma::Cluster.new
 
     Karma::Commands.call({
-      command:   "increment",
-      tree_name: "articles",
-      key:       42_u64,
+      v:      2,
+      op:     "counter.increment",
+      series: "articles",
+      key:    42_u64,
     }.to_json, cluster)
 
     File.read(Karma::Wal.path(dump_dir)).should contain("\"op\":\"counter.increment\"")
@@ -510,10 +549,11 @@ describe Karma::Wal do
     cluster = Karma::Cluster.new
 
     Karma::Commands.call({
-      command:   "increment",
-      tree_name: "articles",
-      key:       42_u64,
-      token:     "secret",
+      v:      2,
+      op:     "counter.increment",
+      series: "articles",
+      key:    42_u64,
+      token:  "secret",
     }.to_json, cluster)
 
     wal = File.read(Karma::Wal.path(dump_dir))
@@ -524,8 +564,8 @@ describe Karma::Wal do
     Karma.configure { |c| c.auth_token = nil }
   end
 
-  it "replays legacy v1 WAL entries" do
-    dump_dir = File.expand_path(".spec_wal_legacy_#{Time.local.to_unix_ms}")
+  it "rejects v1 WAL entries during restore" do
+    dump_dir = File.expand_path(".spec_wal_v1_rejected_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }
     Dir.mkdir_p(dump_dir)
     File.write(Karma::Wal.path(dump_dir), {
@@ -534,9 +574,9 @@ describe Karma::Wal do
       key:       42_u64,
     }.to_json + "\n")
 
-    restored = Karma::Cluster.restore_with_wal(dump_dir)
-
-    restored.get("articles").sum(42_u64).should eq(1_u64)
+    expect_raises(Karma::Error, /WAL entry without v2 LSN envelope/) do
+      Karma::Cluster.restore_with_wal(dump_dir)
+    end
   end
 
   it "writes batch increments to one WAL entry and replays them" do

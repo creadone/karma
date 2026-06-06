@@ -20,23 +20,23 @@ describe Karma do
 
     cluster = Karma::Cluster.new
 
-    # create tree
     Karma::Commands.call({
-      command:   "create",
-      tree_name: "articles",
+      v:      2,
+      op:     "tree.create",
+      series: "articles",
     }.to_json, cluster)
 
-    # make sure there is at least one value
     Karma::Commands.call({
-      command:   "increment",
-      tree_name: "articles",
-      key:       123_u64,
+      v:      2,
+      op:     "counter.increment",
+      series: "articles",
+      key:    123_u64,
     }.to_json, cluster)
 
-    # dump the tree
     Karma::Commands.call({
-      command:   "dump",
-      tree_name: "articles",
+      v:      2,
+      op:     "snapshot.create",
+      series: "articles",
     }.to_json, cluster)
 
     files = Dir.glob(File.join(dump_dir, "*.tree"))
@@ -55,11 +55,11 @@ describe Karma do
     cluster = Karma::Cluster.new
 
     %w[one two].each do |name|
-      Karma::Commands.call({command: "create", tree_name: name}.to_json, cluster)
-      Karma::Commands.call({command: "increment", tree_name: name, key: 1_u64}.to_json, cluster)
+      Karma::Commands.call({v: 2, op: "tree.create", series: name}.to_json, cluster)
+      Karma::Commands.call({v: 2, op: "counter.increment", series: name, key: 1_u64}.to_json, cluster)
     end
 
-    Karma::Commands.call({command: "dump_all"}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "snapshot.create_all"}.to_json, cluster)
 
     files = Dir.glob(File.join(dump_dir, "*.tree"))
     files.size.should be >= 2
@@ -77,18 +77,19 @@ describe Karma do
     tree_name = "short_links_daily"
     cluster = Karma::Cluster.new
 
-    Karma::Commands.call({command: "create", tree_name: tree_name}.to_json, cluster)
-    Karma::Commands.call({command: "increment", tree_name: tree_name, key: 42_u64}.to_json, cluster)
-    Karma::Commands.call({command: "dump", tree_name: tree_name}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "tree.create", series: tree_name}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: tree_name, key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "snapshot.create", series: tree_name}.to_json, cluster)
 
     restored = Karma::Cluster.restore(dump_dir)
 
     restored.trees.keys.should contain(tree_name)
     restored.trees.keys.should_not contain("daily")
     Karma::Commands.call({
-      command:   "sum",
-      tree_name: tree_name,
-      key:       42_u64,
+      v:      2,
+      op:     "counter.sum",
+      series: tree_name,
+      key:    42_u64,
     }.to_json, restored).tap do |response|
       parsed = expect_success(response)
       parsed["response"].as_i.should eq(1)
@@ -110,8 +111,8 @@ describe Karma do
     Dir.glob(File.join(dump_dir, ".*.tmp")).should be_empty
   end
 
-  it "reads legacy dump metadata when sidecar is missing" do
-    dump_dir = File.expand_path(".spec_dumps_legacy_metadata_#{Time.local.to_unix_ms}")
+  it "reads snapshot metadata from filename when sidecar is missing" do
+    dump_dir = File.expand_path(".spec_dumps_filename_metadata_#{Time.local.to_unix_ms}")
     Dir.mkdir_p(dump_dir)
     dump_path = File.join(dump_dir, "1_articles.tree")
     File.write(dump_path, "existing")

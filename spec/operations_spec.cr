@@ -4,7 +4,7 @@ describe "operations commands" do
   it "returns health response" do
     cluster = Karma::Cluster.new
 
-    parsed = expect_success(Karma::Commands.call({command: "health"}.to_json, cluster))
+    parsed = expect_success(Karma::Commands.call({v: 2, op: "system.health"}.to_json, cluster))
 
     parsed["response"]["status"].as_s.should eq("ok")
     parsed["response"]["role"].as_s.should eq("master")
@@ -16,9 +16,9 @@ describe "operations commands" do
     Karma.configure { |c| c.dump_dir = dump_dir }
     cluster = Karma::Cluster.new
 
-    Karma::Commands.call({command: "increment", tree_name: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "articles", key: 42_u64}.to_json, cluster)
 
-    parsed = expect_success(Karma::Commands.call({command: "stats"}.to_json, cluster))
+    parsed = expect_success(Karma::Commands.call({v: 2, op: "system.stats"}.to_json, cluster))
 
     parsed["response"]["trees"].as_i.should eq(1)
     parsed["response"]["keys"].as_i.should eq(1)
@@ -28,7 +28,6 @@ describe "operations commands" do
     parsed["response"]["memory_bytes"].as_i.should be > 0
     parsed["response"]["command_count"].as_i.should be > 0
     parsed["response"]["latency_ms_last"].as_f.should be >= 0.0
-    parsed["response"]["legacy_request_count"].as_i.should be > 0
     parsed["response"]["query_timeout_count"].as_i.should be >= 0
     parsed["response"]["batch_read_count"].as_i.should be >= 0
     parsed["response"]["batch_write_count"].as_i.should be >= 0
@@ -40,7 +39,7 @@ describe "operations commands" do
   it "returns metrics response" do
     cluster = Karma::Cluster.new
 
-    parsed = expect_success(Karma::Commands.call({command: "metrics"}.to_json, cluster))
+    parsed = expect_success(Karma::Commands.call({v: 2, op: "system.metrics"}.to_json, cluster))
 
     metrics = parsed["response"].as_s
     metrics.should contain("karma_uptime_seconds")
@@ -50,7 +49,6 @@ describe "operations commands" do
     metrics.should contain("karma_memory_bytes")
     metrics.should contain("karma_commands_total")
     metrics.should contain("karma_errors_total")
-    metrics.should contain("karma_protocol_v1_requests_total")
     metrics.should contain("karma_query_timeouts_total")
     metrics.should contain("karma_batch_reads_total")
     metrics.should contain("karma_batch_read_keys_total")
@@ -85,7 +83,7 @@ describe "operations commands" do
     Karma::Commands.call({v: 2, op: "tree.summary", tree: "large"}.to_json, cluster)
     Karma.configure { |c| c.query_timeout_ms = 1_000 }
 
-    stats = expect_success(Karma::Commands.call({command: "stats"}.to_json, cluster))["response"]
+    stats = expect_success(Karma::Commands.call({v: 2, op: "system.stats"}.to_json, cluster))["response"]
     stats["batch_read_count"].as_i.should be >= 1
     stats["batch_read_key_count"].as_i.should be >= 2
     stats["batch_write_count"].as_i.should be >= 1
@@ -94,7 +92,7 @@ describe "operations commands" do
     stats["compact_count"].as_i.should be >= 1
     stats["query_timeout_count"].as_i.should be >= 1
 
-    metrics = expect_success(Karma::Commands.call({command: "metrics"}.to_json, cluster))["response"].as_s
+    metrics = expect_success(Karma::Commands.call({v: 2, op: "system.metrics"}.to_json, cluster))["response"].as_s
     metrics.should contain("karma_batch_reads_total")
     metrics.should contain("karma_batch_writes_total")
     metrics.should contain("karma_retention_operations_total")
@@ -127,7 +125,7 @@ describe "operations commands" do
       items:     [[43_u64, 20260505_u64, 10_u64]],
     }.to_json, cluster)
 
-    stats = expect_success(Karma::Commands.call({command: "stats"}.to_json, cluster))["response"]
+    stats = expect_success(Karma::Commands.call({v: 2, op: "system.stats"}.to_json, cluster))["response"]
     stats["ingest_active_streams"].as_i.should eq(1)
     stats["ingest_chunks_applied"].as_i.should eq(1)
     stats["ingest_chunks_skipped"].as_i.should eq(1)
@@ -135,7 +133,7 @@ describe "operations commands" do
     stats["ingest_items_applied"].as_i.should eq(1)
     stats["ingest_latency_ms_last"].as_f.should be >= 0.0
 
-    metrics = expect_success(Karma::Commands.call({command: "metrics"}.to_json, cluster))["response"].as_s
+    metrics = expect_success(Karma::Commands.call({v: 2, op: "system.metrics"}.to_json, cluster))["response"].as_s
     metrics.should contain("karma_ingest_active_streams 1")
     metrics.should contain("karma_ingest_chunks_applied_total 1")
     metrics.should contain("karma_ingest_chunks_skipped_total 1")
@@ -158,7 +156,7 @@ describe "operations commands" do
     parsed["success"].as_bool.should be_true
     parsed["response"].as_s.should eq("OK")
 
-    stats = expect_success(Karma::Commands.call({command: "stats"}.to_json, cluster))["response"]
+    stats = expect_success(Karma::Commands.call({v: 2, op: "system.stats"}.to_json, cluster))["response"]
     stats["reconciliation_run_count"].as_i.should be >= 1
     stats["reconciliation_checked_points"].as_i.should be >= 3
     stats["reconciliation_mismatch_count"].as_i.should be >= 1
@@ -171,7 +169,7 @@ describe "operations commands" do
     stats["recovery_checkpoint_count"].as_i.should be >= 0
     stats["recovery_last_checkpoint_unix"].as_i.should be >= 0
 
-    metrics = expect_success(Karma::Commands.call({command: "metrics"}.to_json, cluster))["response"].as_s
+    metrics = expect_success(Karma::Commands.call({v: 2, op: "system.metrics"}.to_json, cluster))["response"].as_s
     metrics.should contain("karma_reconciliation_runs_total")
     metrics.should contain("karma_reconciliation_checked_points_total")
     metrics.should contain("karma_reconciliation_mismatches_total")
@@ -380,10 +378,10 @@ describe "operations commands" do
     Karma.configure { |c| c.dump_dir = dump_dir }
     cluster = Karma::Cluster.new
 
-    Karma::Commands.call({command: "increment", tree_name: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "articles", key: 42_u64}.to_json, cluster)
     cluster.dump_all
 
-    parsed = expect_success(Karma::Commands.call({command: "verify"}.to_json, cluster))
+    parsed = expect_success(Karma::Commands.call({v: 2, op: "snapshot.verify"}.to_json, cluster))
 
     parsed["response"]["status"].as_s.should eq("ok")
     parsed["response"]["trees"].as_i.should eq(1)
@@ -399,7 +397,7 @@ describe "operations commands" do
     Karma.configure { |c| c.dump_dir = dump_dir }
     cluster = Karma::Cluster.new
 
-    Karma::Commands.call({command: "increment", tree_name: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "articles", key: 42_u64}.to_json, cluster)
     cluster.dump_all
     dump_path = Karma::Backup.dumps(dump_dir).first
     metadata_path = Karma::Backup.metadata_path(dump_path)
@@ -407,7 +405,7 @@ describe "operations commands" do
     metadata["bytes"] = JSON::Any.new(0_i64)
     File.write(metadata_path, metadata.to_json)
 
-    parsed = parse_response(Karma::Commands.call({command: "verify"}.to_json, cluster))
+    parsed = parse_response(Karma::Commands.call({v: 2, op: "snapshot.verify"}.to_json, cluster))
 
     parsed["success"].as_bool.should be_false
     parsed["error_code"].as_s.should eq("validation_error")
@@ -425,7 +423,7 @@ describe "operations commands" do
     lines = File.read_lines(Karma::Wal.path(dump_dir))
     File.write(Karma::Wal.path(dump_dir), "#{lines[0]}\n#{lines[2]}\n")
 
-    parsed = parse_response(Karma::Commands.call({command: "verify"}.to_json, cluster))
+    parsed = parse_response(Karma::Commands.call({v: 2, op: "snapshot.verify"}.to_json, cluster))
 
     parsed["success"].as_bool.should be_false
     parsed["error_code"].as_s.should eq("validation_error")
@@ -437,10 +435,10 @@ describe "operations commands" do
     Karma.configure { |c| c.dump_dir = dump_dir }
     cluster = Karma::Cluster.new
 
-    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
-    Karma::Commands.call({command: "dump", tree_name: "articles"}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "snapshot.create", series: "articles"}.to_json, cluster)
 
-    parsed = parse_response(Karma::Commands.call({command: "verify"}.to_json, cluster))
+    parsed = parse_response(Karma::Commands.call({v: 2, op: "snapshot.verify"}.to_json, cluster))
 
     parsed["success"].as_bool.should be_false
     parsed["error_code"].as_s.should eq("validation_error")
@@ -452,13 +450,13 @@ describe "operations commands" do
     Karma.configure { |c| c.dump_dir = dump_dir }
     cluster = Karma::Cluster.new
 
-    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
-    Karma::Commands.call({v: 2, op: "counter.increment", tree: "links", key: 42_u64}.to_json, cluster)
-    Karma::Commands.call({command: "dump", tree_name: "articles"}.to_json, cluster)
-    Karma::Commands.call({v: 2, op: "counter.increment", tree: "links", key: 43_u64}.to_json, cluster)
-    Karma::Commands.call({command: "dump", tree_name: "links"}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "links", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "snapshot.create", series: "articles"}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "links", key: 43_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "snapshot.create", series: "links"}.to_json, cluster)
 
-    parsed = parse_response(Karma::Commands.call({command: "verify"}.to_json, cluster))
+    parsed = parse_response(Karma::Commands.call({v: 2, op: "snapshot.verify"}.to_json, cluster))
 
     parsed["success"].as_bool.should be_false
     parsed["error_code"].as_s.should eq("validation_error")
@@ -470,7 +468,7 @@ describe "operations commands" do
     Karma.configure { |c| c.dump_dir = dump_dir }
     cluster = Karma::Cluster.new
 
-    Karma::Commands.call({command: "increment", tree_name: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "articles", key: 42_u64}.to_json, cluster)
     cluster.dump_all
 
     parsed = parse_response(Karma::Commands.call({v: 2, op: "snapshot.info"}.to_json, cluster))
@@ -539,9 +537,9 @@ describe "operations commands" do
     Karma.configure { |c| c.dump_dir = dump_dir }
     cluster = Karma::Cluster.new
 
-    Karma::Commands.call({command: "increment", tree_name: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", series: "articles", key: 42_u64}.to_json, cluster)
 
-    parsed = expect_success(Karma::Commands.call({command: "verify"}.to_json, cluster))
+    parsed = expect_success(Karma::Commands.call({v: 2, op: "snapshot.verify"}.to_json, cluster))
 
     parsed["response"]["status"].as_s.should eq("ok")
     parsed["response"]["trees"].as_i.should eq(1)

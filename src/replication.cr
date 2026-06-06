@@ -189,7 +189,6 @@ module Karma
         persist: false,
         authorize: false,
         synchronize: false,
-        track_legacy: false,
         enforce_request_size: false,
         enforce_role: false
       )

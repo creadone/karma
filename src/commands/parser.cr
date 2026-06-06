@@ -11,11 +11,14 @@ module Karma
     end
 
     private def self.parse_object(message : String, object : Hash(String, JSON::Any)) : Directive
-      if object.has_key?("op") || object["v"]?.try(&.as_i?) == 2
-        parse_v2(object)
-      else
-        Directive.from_json(message)
-      end
+      require_v2_request!(object)
+      parse_v2(object)
+    end
+
+    private def self.require_v2_request!(object : Hash(String, JSON::Any)) : Nil
+      version = object["v"]?.try(&.as_i?)
+      raise Karma::Error.new("unsupported_protocol", "Karma 1.0 accepts only protocol v2 requests with field v=2") unless version == 2
+      raise Karma::Error.new("validation_error", "Field op is required") unless object["op"]?.try(&.as_s?)
     end
   end
 end

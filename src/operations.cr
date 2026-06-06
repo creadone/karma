@@ -4,7 +4,6 @@ module Karma
     METRICS_MUTEX = Mutex.new
     @@command_count = 0_i64
     @@error_count = 0_i64
-    @@legacy_request_count = 0_i64
     @@query_timeout_count = 0_i64
     @@batch_read_count = 0_i64
     @@batch_read_key_count = 0_i64
@@ -23,12 +22,6 @@ module Karma
     @@reconciliation_last_max_abs_delta = 0_i64
     @@total_latency_ms = 0.0
     @@last_latency_ms = 0.0
-
-    def self.record_legacy_request : Nil
-      METRICS_MUTEX.synchronize do
-        @@legacy_request_count += 1
-      end
-    end
 
     def self.record_query_timeout : Nil
       METRICS_MUTEX.synchronize do
@@ -99,10 +92,6 @@ module Karma
 
     private def self.error_count : Int64
       METRICS_MUTEX.synchronize { @@error_count }
-    end
-
-    private def self.legacy_request_count : Int64
-      METRICS_MUTEX.synchronize { @@legacy_request_count }
     end
 
     private def self.query_timeout_count : Int64

@@ -44,7 +44,7 @@ module Karma
       property fingerprint : String?
       property idempotency_created_at_unix : Int64?
       property before_unix : Int64?
-      property protocol_version : UInt32 = 1_u32
+      property protocol_version : UInt32 = Karma::Protocol::VERSION
 
       def initialize(
         @command : String,
@@ -76,7 +76,7 @@ module Karma
         @fingerprint : String? = nil,
         @idempotency_created_at_unix : Int64? = nil,
         @before_unix : Int64? = nil,
-        @protocol_version : UInt32 = 1_u32,
+        @protocol_version : UInt32 = Karma::Protocol::VERSION,
       )
       end
 

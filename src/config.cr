@@ -11,6 +11,8 @@ module Karma
     property wal : Bool = true
     property wal_fsync : Bool = true
     property wal_segment_bytes : Int32 = 64 * 1024 * 1024
+    property wal_batch_size : Int32 = 1_024
+    property wal_batch_wait_microseconds : Int32 = 0
     property max_request_bytes : Int32 = 4096
     property max_response_bytes : Int32 = 1_048_576
     property read_timeout_seconds : Int32 = 5
@@ -39,6 +41,8 @@ module Karma
       @wal = bool_env("KARMA_WAL", @wal)
       @wal_fsync = bool_env("KARMA_WAL_FSYNC", @wal_fsync)
       @wal_segment_bytes = int_env("KARMA_WAL_SEGMENT_BYTES", @wal_segment_bytes)
+      @wal_batch_size = int_env("KARMA_WAL_BATCH_SIZE", @wal_batch_size)
+      @wal_batch_wait_microseconds = int_env("KARMA_WAL_BATCH_WAIT_MICROSECONDS", @wal_batch_wait_microseconds)
       @max_request_bytes = int_env("KARMA_MAX_REQUEST_BYTES", @max_request_bytes)
       @max_response_bytes = int_env("KARMA_MAX_RESPONSE_BYTES", @max_response_bytes)
       @read_timeout_seconds = int_env("KARMA_READ_TIMEOUT_SECONDS", @read_timeout_seconds)
@@ -64,6 +68,8 @@ module Karma
       raise_validation("dump_dir must not be empty") if @dump_dir.empty?
       raise_validation("role must be master or slave") unless %w[master slave].includes?(@role)
       raise_validation("wal_segment_bytes must be greater than or equal to 0") unless @wal_segment_bytes >= 0
+      raise_validation("wal_batch_size must be greater than 0") unless @wal_batch_size > 0
+      raise_validation("wal_batch_wait_microseconds must be greater than or equal to 0") unless @wal_batch_wait_microseconds >= 0
       raise_validation("max_request_bytes must be greater than 0") unless @max_request_bytes > 0
       raise_validation("max_response_bytes must be greater than or equal to 0") unless @max_response_bytes >= 0
       raise_validation("read_timeout_seconds must be greater than or equal to 0") unless @read_timeout_seconds >= 0

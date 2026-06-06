@@ -44,6 +44,14 @@ module Karma
           Karma.config.wal_segment_bytes = int_flag(bytes, "--wal-segment-bytes")
         end
 
+        parser.on("--wal-batch-size=count", "Maximum WAL entries flushed by one writer batch (default: #{Karma.config.wal_batch_size})") do |count|
+          Karma.config.wal_batch_size = int_flag(count, "--wal-batch-size")
+        end
+
+        parser.on("--wal-batch-wait-us=microseconds", "Maximum WAL writer wait for additional entries (default: #{Karma.config.wal_batch_wait_microseconds})") do |microseconds|
+          Karma.config.wal_batch_wait_microseconds = int_flag(microseconds, "--wal-batch-wait-us")
+        end
+
         parser.on("--max-request-bytes=bytes", "Maximum request line size (default: #{Karma.config.max_request_bytes})") do |bytes|
           Karma.config.max_request_bytes = int_flag(bytes, "--max-request-bytes")
         end

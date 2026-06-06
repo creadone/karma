@@ -11,7 +11,7 @@ module Karma
         File.each_line(wal_path) do |line|
           next if line.blank?
 
-          response = Commands.call(entry_json(line), cluster, persist: false, authorize: false, synchronize: false, track_legacy: false, enforce_request_size: false, enforce_role: false)
+          response = Commands.call(entry_json(line), cluster, persist: false, authorize: false, synchronize: false, enforce_request_size: false, enforce_role: false)
           parsed_response = JSON.parse(response)
           unless parsed_response["success"].as_bool
             raise "Cannot replay WAL entry: #{parsed_response["response"]}"
@@ -24,7 +24,9 @@ module Karma
     private def self.entry_json(line : String) : String
       object = JSON.parse(line).as_h
       entry = object["entry"]?
-      entry ? entry.to_json : line
+      raise Karma::Error.new("validation_error", "WAL entry without v2 LSN envelope is not supported") if entry.nil?
+
+      entry.to_json
     end
   end
 end
