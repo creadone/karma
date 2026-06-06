@@ -137,6 +137,7 @@ bin/karma
 | `--nodelay=true\|false` | `KARMA_TCP_NODELAY` | `true` | Включить TCP_NODELAY. |
 | `--wal=true\|false` | `KARMA_WAL` | `true` | Писать изменяющие команды в WAL. |
 | `--wal-fsync=true\|false` | `KARMA_WAL_FSYNC` | `true` | Делать fsync на каждую запись и очистку WAL. |
+| `--wal-segment-bytes=bytes` | `KARMA_WAL_SEGMENT_BYTES` | `67108864` | Ротировать активный WAL после такого числа байт. `0` отключает ротацию. |
 | `--max-request-bytes=bytes` | `KARMA_MAX_REQUEST_BYTES` | `4096` | Максимальный размер строки JSON-запроса. Должен быть больше 0. |
 | `--max-response-bytes=bytes` | `KARMA_MAX_RESPONSE_BYTES` | `1048576` | Максимальный размер JSON-ответа. `0` отключает лимит. |
 | `--read-timeout=seconds` | `KARMA_READ_TIMEOUT_SECONDS` | `5` | Таймаут чтения из сокета. `0` отключает. |
@@ -475,6 +476,14 @@ Karma использует два механизма сохранения дан
 * снимки состояния: MessagePack-файлы `.tree`, по одному на series;
 * WAL: JSON-записи в `karma.wal`, по одной записи на строку.
 
+По умолчанию активный WAL ротируется на 64 MiB. Закрытые WAL-файлы называются
+`karma.wal.<first_lsn>.segment` и проигрываются перед активным `karma.wal`.
+Для каждого сегмента создается sidecar-файл `*.segment.idx` с соответствием
+`LSN -> byte offset`. Репликация использует эти индексы, чтобы переходить к
+нужному LSN без сканирования старого WAL. Если индекс отсутствует, устарел или
+указывает на неправильную границу строки, Karma пересканирует сегмент. Значение
+`--wal-segment-bytes=0` оставляет старый режим с одним WAL-файлом.
+
 Создать и посмотреть снимки состояния:
 
 ```json
@@ -665,27 +674,29 @@ socket.close
 среды, сети и профиля нагрузки. Эти скрипты нужны как повторяемые локальные
 проверки, а не как универсальный бенчмарк.
 
-Последние зафиксированные локальные результаты от 29 мая 2026:
+Последние зафиксированные локальные результаты от 5 июня 2026. Это локальные
+регрессионные проверки; короткие микробенчмарки могут двигаться на десятки
+процентов между запусками на той же машине.
 
 | Тест | Режим | Производительность | p95 задержка |
 | --- | --- | ---: | ---: |
-| `single_increment` | внутри процесса, WAL выключен | 274 908 ops/sec | 0.0048 ms |
-| `single_sum` | внутри процесса, WAL выключен | 406 078 ops/sec | 0.0026 ms |
-| `series.batch_add` | внутри процесса, WAL выключен | 1 940 884 items/sec | 1.0552 ms |
-| `counter.batch_sum` | внутри процесса, WAL выключен | 2 398 552 key reads/sec | 0.8581 ms |
-| `tcp_single_increment` | TCP, 4 клиента, WAL выключен | 34 338 ops/sec | 0.1989 ms |
-| `tcp_single_sum` | TCP, 4 клиента, WAL выключен | 40 097 ops/sec | 0.1241 ms |
-| `tcp_series.batch_add` | TCP, 4 клиента, WAL выключен | 1 642 115 items/sec | 2.0443 ms |
-| `tcp_counter.batch_sum` | TCP, 4 клиента, WAL выключен | 2 023 058 key reads/sec | 2.5341 ms |
-| `tcp_single_increment` | TCP, 4 клиента, WAL включен, fsync выключен | 4 078 ops/sec | 1.3904 ms |
-| `tcp_single_sum` | TCP, 4 клиента, WAL включен, fsync выключен | 38 913 ops/sec | 0.1266 ms |
-| `tcp_series.batch_add` | TCP, 4 клиента, WAL включен, fsync выключен | 970 674 items/sec | 3.6078 ms |
-| `tcp_counter.batch_sum` | TCP, 4 клиента, WAL включен, fsync выключен | 1 797 181 key reads/sec | 2.5988 ms |
+| `single_increment` | внутри процесса, WAL выключен | 256 822 ops/sec | 0.0043 ms |
+| `single_sum` | внутри процесса, WAL выключен | 341 780 ops/sec | 0.0032 ms |
+| `series.batch_add` | внутри процесса, WAL выключен | 1 688 429 items/sec | 1.2420 ms |
+| `counter.batch_sum` | внутри процесса, WAL выключен | 2 165 827 key reads/sec | 1.0535 ms |
+| `tcp_single_increment` | TCP, 4 клиента, WAL выключен | 31 177 ops/sec | 0.1833 ms |
+| `tcp_single_sum` | TCP, 4 клиента, WAL выключен | 33 765 ops/sec | 0.1537 ms |
+| `tcp_series.batch_add` | TCP, 4 клиента, WAL выключен | 1 193 062 items/sec | 2.4643 ms |
+| `tcp_counter.batch_sum` | TCP, 4 клиента, WAL выключен | 1 859 901 key reads/sec | 2.6600 ms |
+| `tcp_single_increment` | TCP, 4 клиента, WAL включен, fsync выключен | 10 833 ops/sec | 0.6422 ms |
+| `tcp_single_sum` | TCP, 4 клиента, WAL включен, fsync выключен | 36 587 ops/sec | 0.1474 ms |
+| `tcp_series.batch_add` | TCP, 4 клиента, WAL включен, fsync выключен | 1 020 590 items/sec | 2.7206 ms |
+| `tcp_counter.batch_sum` | TCP, 4 клиента, WAL включен, fsync выключен | 1 712 127 key reads/sec | 4.5072 ms |
 
 Точечная проверка горячего пути идемпотентности: внутри процесса, WAL
 выключен, JSON-запросы подготовлены заранее. `counter.increment` без
-`idempotency_key` обработал около 417 660 ops/sec; с уникальным
-`idempotency_key` - около 226 472 ops/sec. Для at-least-once producers с
+`idempotency_key` обработал около 416 216 ops/sec; с уникальным
+`idempotency_key` - около 213 745 ops/sec. Для at-least-once producers с
 высокой нагрузкой лучше использовать `series.batch_add`, чтобы накладные
 расходы идемпотентности распределялись на много items.
 
@@ -694,18 +705,18 @@ bucket-ов на ключ:
 
 | Ключи | Точек данных | Память | Снимок | Пакетное чтение | p95 пакета | Сводка | Снимок | Восстановление |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10 000 | 70 000 | 7.99 MiB | 0.57 MiB | 2 152 874 key reads/sec | 0.8227 ms | 3.79 ms | 4.04 ms | 2.92 ms |
-| 50 000 | 350 000 | 27.66 MiB | 2.86 MiB | 1 831 463 key reads/sec | 0.4508 ms | 29.40 ms | 21.14 ms | 16.16 ms |
-| 100 000 | 700 000 | 46.78 MiB | 5.79 MiB | 1 420 289 key reads/sec | 0.4680 ms | 83.08 ms | 42.00 ms | 32.88 ms |
+| 10 000 | 70 000 | 8.02 MiB | 0.57 MiB | 2 302 852 key reads/sec | 0.8223 ms | 3.85 ms | 3.30 ms | 2.76 ms |
+| 50 000 | 350 000 | 27.80 MiB | 2.86 MiB | 1 143 466 key reads/sec | 2.1352 ms | 37.21 ms | 27.35 ms | 17.56 ms |
+| 100 000 | 700 000 | 48.44 MiB | 5.79 MiB | 1 423 217 key reads/sec | 0.4478 ms | 80.40 ms | 40.20 ms | 32.10 ms |
 
 Профиль высокой кардинальности: внутри процесса, WAL выключен, 356 дневных
 bucket-ов на ключ:
 
 | Ключи | Точек данных | Память | Снимок | Пакетное чтение | p95 пакета | Сводка | Снимок | Восстановление |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10 000 | 3 560 000 | 237.08 MiB | 20.58 MiB | 2 207 683 key reads/sec | 4.1449 ms | 149.95 ms | 81.47 ms | 121.35 ms |
-| 25 000 | 8 900 000 | 557.11 MiB | 51.45 MiB | 2 110 358 key reads/sec | 2.2563 ms | 438.43 ms | 196.75 ms | 281.82 ms |
-| 50 000 | 17 800 000 | 1 181.16 MiB | 102.90 MiB | 1 891 176 key reads/sec | 2.5203 ms | 1 009.71 ms | 473.55 ms | 690.07 ms |
+| 10 000 | 3 560 000 | 239.30 MiB | 20.58 MiB | 2 277 821 key reads/sec | 4.1174 ms | 137.72 ms | 77.19 ms | 114.27 ms |
+| 25 000 | 8 900 000 | 559.33 MiB | 51.45 MiB | 2 148 006 key reads/sec | 2.2384 ms | 404.00 ms | 201.22 ms | 282.08 ms |
+| 50 000 | 17 800 000 | 1 119.38 MiB | 102.90 MiB | 1 909 754 key reads/sec | 2.6850 ms | 985.17 ms | 434.92 ms | 618.38 ms |
 
 Тест репликации в тот же день запускался с `clients=4`, `keys=10000`,
 `batch_size=1000`, `write_batches=100`, `read_rounds=100`,
@@ -713,6 +724,16 @@ bucket-ов на ключ:
 Slave поднялся из снимка состояния, проиграл WAL с LSN 10 до LSN 110,
 завершил прогон с `final_lag_entries=0`, а итоговые суммы совпали:
 `master_total=110000`, `slave_total=110000`.
+Смешанная фаза чтения/записи обработала около 807 117 operations/sec как на
+потоке записи master, так и на потоке чтения slave.
+
+Проверки чтения WAL-страниц использовали `limit=1000`. Короткий benchmark на
+100 000 записей не пересекает стандартную границу сегмента 64 MiB: холодное
+чтение страницы заняло 2.06 ms, hot p50/p95 - 1.7303/2.0745 ms, последовательное
+догоняющее чтение - около 569 364 entries/sec. Сегментированный прогон на
+1 000 000 записей прочитал холодную страницу из сегмента с sidecar-индексом за
+80.73 ms против 267.28 ms без sidecar-индекса, ускорение 3.31x; hot p50/p95 -
+1.8247/2.2133 ms.
 
 Тест слоя команд внутри процесса:
 
@@ -761,6 +782,19 @@ bin/karma_replication_load_test \
   --batch-size=1000 \
   --write-batches=100 \
   --read-rounds=100
+```
+
+Benchmark чтения WAL-страниц для догоняющей репликации и tail polling:
+
+```sh
+crystal run --release scripts/wal_page_bench.cr -- \
+  --entries=100000 \
+  --limit=1000 \
+  --tail-rounds=20 \
+  --segment-bytes=67108864 \
+  --after-lsn=10000 \
+  --compare-sidecar \
+  --skip-linear
 ```
 
 Сверка CSV против экспортированных агрегатов:

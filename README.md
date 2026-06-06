@@ -135,6 +135,7 @@ option name ends with `-ms`.
 | `--nodelay=true\|false` | `KARMA_TCP_NODELAY` | `true` | Enable TCP_NODELAY. |
 | `--wal=true\|false` | `KARMA_WAL` | `true` | Persist mutating commands to WAL. |
 | `--wal-fsync=true\|false` | `KARMA_WAL_FSYNC` | `true` | Fsync every WAL append/truncate. |
+| `--wal-segment-bytes=bytes` | `KARMA_WAL_SEGMENT_BYTES` | `67108864` | Rotate the active WAL after this many bytes. Use 0 to disable rotation. |
 | `--max-request-bytes=bytes` | `KARMA_MAX_REQUEST_BYTES` | `4096` | Maximum JSON request line size. Must be greater than 0. |
 | `--max-response-bytes=bytes` | `KARMA_MAX_RESPONSE_BYTES` | `1048576` | Maximum JSON response size. Use 0 to disable. |
 | `--read-timeout=seconds` | `KARMA_READ_TIMEOUT_SECONDS` | `5` | Client socket read timeout. Use 0 to disable. |
@@ -469,6 +470,14 @@ Karma uses two persistence mechanisms:
 * snapshots: MessagePack `.tree` files, one per series;
 * WAL: newline-delimited JSON entries in `karma.wal`.
 
+By default the active WAL rotates at 64 MiB. Rotated WAL files are named
+`karma.wal.<first_lsn>.segment` and are replayed before the active `karma.wal`.
+Each segment gets a sidecar `*.segment.idx` file with `LSN -> byte offset`
+entries. Replication uses these indexes to jump directly to the requested LSN
+instead of scanning old WAL data. If an index is missing, stale, or points to an
+invalid line boundary, Karma falls back to scanning the segment. Set
+`--wal-segment-bytes=0` to keep the legacy single-file WAL behavior.
+
 Create and inspect snapshots:
 
 ```json
@@ -655,26 +664,28 @@ Local results depend on CPU, disk, filesystem, container runtime, network, and
 workload mix. The scripts below are intended as repeatable local checks, not as
 universal benchmarks.
 
-Last recorded local results from 2026-05-29:
+Last recorded local results from 2026-06-05. Treat these as local regression
+checks; short microbenchmarks can move by double-digit percentages between
+runs on the same machine.
 
 | Test | Mode | Throughput | p95 latency |
 | --- | --- | ---: | ---: |
-| `single_increment` | in-process, WAL off | 274,908 ops/sec | 0.0048 ms |
-| `single_sum` | in-process, WAL off | 406,078 ops/sec | 0.0026 ms |
-| `series.batch_add` | in-process, WAL off | 1,940,884 items/sec | 1.0552 ms |
-| `counter.batch_sum` | in-process, WAL off | 2,398,552 key reads/sec | 0.8581 ms |
-| `tcp_single_increment` | TCP, 4 clients, WAL off | 34,338 ops/sec | 0.1989 ms |
-| `tcp_single_sum` | TCP, 4 clients, WAL off | 40,097 ops/sec | 0.1241 ms |
-| `tcp_series.batch_add` | TCP, 4 clients, WAL off | 1,642,115 items/sec | 2.0443 ms |
-| `tcp_counter.batch_sum` | TCP, 4 clients, WAL off | 2,023,058 key reads/sec | 2.5341 ms |
-| `tcp_single_increment` | TCP, 4 clients, WAL on, fsync off | 4,078 ops/sec | 1.3904 ms |
-| `tcp_single_sum` | TCP, 4 clients, WAL on, fsync off | 38,913 ops/sec | 0.1266 ms |
-| `tcp_series.batch_add` | TCP, 4 clients, WAL on, fsync off | 970,674 items/sec | 3.6078 ms |
-| `tcp_counter.batch_sum` | TCP, 4 clients, WAL on, fsync off | 1,797,181 key reads/sec | 2.5988 ms |
+| `single_increment` | in-process, WAL off | 256,822 ops/sec | 0.0043 ms |
+| `single_sum` | in-process, WAL off | 341,780 ops/sec | 0.0032 ms |
+| `series.batch_add` | in-process, WAL off | 1,688,429 items/sec | 1.2420 ms |
+| `counter.batch_sum` | in-process, WAL off | 2,165,827 key reads/sec | 1.0535 ms |
+| `tcp_single_increment` | TCP, 4 clients, WAL off | 31,177 ops/sec | 0.1833 ms |
+| `tcp_single_sum` | TCP, 4 clients, WAL off | 33,765 ops/sec | 0.1537 ms |
+| `tcp_series.batch_add` | TCP, 4 clients, WAL off | 1,193,062 items/sec | 2.4643 ms |
+| `tcp_counter.batch_sum` | TCP, 4 clients, WAL off | 1,859,901 key reads/sec | 2.6600 ms |
+| `tcp_single_increment` | TCP, 4 clients, WAL on, fsync off | 10,833 ops/sec | 0.6422 ms |
+| `tcp_single_sum` | TCP, 4 clients, WAL on, fsync off | 36,587 ops/sec | 0.1474 ms |
+| `tcp_series.batch_add` | TCP, 4 clients, WAL on, fsync off | 1,020,590 items/sec | 2.7206 ms |
+| `tcp_counter.batch_sum` | TCP, 4 clients, WAL on, fsync off | 1,712,127 key reads/sec | 4.5072 ms |
 
 Idempotency hot-path spot check, in-process, WAL off, prebuilt JSON requests:
-`counter.increment` without `idempotency_key` handled about 417,660 ops/sec;
-with unique `idempotency_key`, about 226,472 ops/sec. For high-throughput
+`counter.increment` without `idempotency_key` handled about 416,216 ops/sec;
+with unique `idempotency_key`, about 213,745 ops/sec. For high-throughput
 at-least-once producers, prefer `series.batch_add` so the idempotency overhead
 is amortized across many items.
 
@@ -682,17 +693,17 @@ Volume sensitivity test, in-process, WAL off, 7 daily buckets per key:
 
 | Keys | Data points | Heap | Snapshot | Batch sum | Batch p95 | Summary | Snapshot | Restore |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10,000 | 70,000 | 7.99 MiB | 0.57 MiB | 2,152,874 key reads/sec | 0.8227 ms | 3.79 ms | 4.04 ms | 2.92 ms |
-| 50,000 | 350,000 | 27.66 MiB | 2.86 MiB | 1,831,463 key reads/sec | 0.4508 ms | 29.40 ms | 21.14 ms | 16.16 ms |
-| 100,000 | 700,000 | 46.78 MiB | 5.79 MiB | 1,420,289 key reads/sec | 0.4680 ms | 83.08 ms | 42.00 ms | 32.88 ms |
+| 10,000 | 70,000 | 8.02 MiB | 0.57 MiB | 2,302,852 key reads/sec | 0.8223 ms | 3.85 ms | 3.30 ms | 2.76 ms |
+| 50,000 | 350,000 | 27.80 MiB | 2.86 MiB | 1,143,466 key reads/sec | 2.1352 ms | 37.21 ms | 27.35 ms | 17.56 ms |
+| 100,000 | 700,000 | 48.44 MiB | 5.79 MiB | 1,423,217 key reads/sec | 0.4478 ms | 80.40 ms | 40.20 ms | 32.10 ms |
 
 High-cardinality yearly profile, in-process, WAL off, 356 daily buckets per key:
 
 | Keys | Data points | Heap | Snapshot | Batch sum | Batch p95 | Summary | Snapshot | Restore |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10,000 | 3,560,000 | 237.08 MiB | 20.58 MiB | 2,207,683 key reads/sec | 4.1449 ms | 149.95 ms | 81.47 ms | 121.35 ms |
-| 25,000 | 8,900,000 | 557.11 MiB | 51.45 MiB | 2,110,358 key reads/sec | 2.2563 ms | 438.43 ms | 196.75 ms | 281.82 ms |
-| 50,000 | 17,800,000 | 1,181.16 MiB | 102.90 MiB | 1,891,176 key reads/sec | 2.5203 ms | 1,009.71 ms | 473.55 ms | 690.07 ms |
+| 10,000 | 3,560,000 | 239.30 MiB | 20.58 MiB | 2,277,821 key reads/sec | 4.1174 ms | 137.72 ms | 77.19 ms | 114.27 ms |
+| 25,000 | 8,900,000 | 559.33 MiB | 51.45 MiB | 2,148,006 key reads/sec | 2.2384 ms | 404.00 ms | 201.22 ms | 282.08 ms |
+| 50,000 | 17,800,000 | 1,119.38 MiB | 102.90 MiB | 1,909,754 key reads/sec | 2.6850 ms | 985.17 ms | 434.92 ms | 618.38 ms |
 
 Replication load test on the same date used `clients=4`, `keys=10000`,
 `batch_size=1000`, `write_batches=100`, `read_rounds=100`,
@@ -700,6 +711,15 @@ Replication load test on the same date used `clients=4`, `keys=10000`,
 The slave bootstrapped from snapshot, replayed WAL from LSN 10 to LSN 110,
 ended with `final_lag_entries=0`, and matched the master total:
 `master_total=110000`, `slave_total=110000`.
+The mixed read/write phase handled about 807,117 operations/sec on both the
+master write stream and slave read stream.
+
+WAL paging spot checks used `limit=1000`. The short 100,000-entry benchmark
+does not cross the default 64 MiB segment boundary: cold page read was 2.06 ms,
+hot p50/p95 was 1.7303/2.0745 ms, and sequential catch-up read about 569,364
+entries/sec. A 1,000,000-entry segmented run read a cold page from a sidecar
+indexed segment in 80.73 ms versus 267.28 ms without the sidecar index, a 3.31x
+speedup; hot p50/p95 was 1.8247/2.2133 ms.
 
 In-process command-layer test:
 
@@ -748,6 +768,19 @@ bin/karma_replication_load_test \
   --batch-size=1000 \
   --write-batches=100 \
   --read-rounds=100
+```
+
+WAL paging benchmark for replication catch-up and tail polling:
+
+```sh
+crystal run --release scripts/wal_page_bench.cr -- \
+  --entries=100000 \
+  --limit=1000 \
+  --tail-rounds=20 \
+  --segment-bytes=67108864 \
+  --after-lsn=10000 \
+  --compare-sidecar \
+  --skip-linear
 ```
 
 CSV reconciliation against exported aggregates:
