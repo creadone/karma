@@ -183,8 +183,7 @@ def snapshot_bytes(dump_dir : String) : Int64
 end
 
 def wal_bytes(dump_dir : String) : Int64
-  path = Karma::Wal.path(dump_dir)
-  File.exists?(path) ? File.size(path) : 0_i64
+  Karma::Wal.bytes(dump_dir)
 end
 
 def seed_data!(cluster : Karma::Cluster, series : String, keys : Int32, buckets : Array(UInt64), batch_size : Int32)

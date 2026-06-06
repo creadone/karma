@@ -7,6 +7,7 @@ Spec.before_each do
   Karma.configure do |c|
     c.dump_dir = File.expand_path(".spec_default_#{Time.local.to_unix_ms}_#{Random.rand(1_000_000)}")
     c.role = "master"
+    c.wal_segment_bytes = 64 * 1024 * 1024
     c.replication_source_host = nil
     c.replication_source_port = 8080
     c.replication_token = nil
@@ -17,6 +18,7 @@ Spec.before_each do
   Karma::Ingest.reset!
   Karma::Recovery.reset!
   Karma::Replication.reset!
+  Karma::Wal.reset!
 end
 
 def parse_response(response : String) : JSON::Any

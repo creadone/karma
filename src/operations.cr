@@ -90,8 +90,7 @@ module Karma
     end
 
     private def self.wal_bytes : Int64
-      wal_path = Karma::Wal.path
-      File.exists?(wal_path) ? File.size(wal_path) : 0_i64
+      Karma::Wal.bytes
     end
 
     private def self.command_count : Int64

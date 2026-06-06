@@ -305,6 +305,33 @@ describe "operations commands" do
     Karma.configure { |c| c.max_response_bytes = 1_048_576 }
   end
 
+  it "reports replication gap when requested WAL was compacted by snapshot" do
+    dump_dir = File.expand_path(".spec_replication_entries_compacted_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    cluster.dump_all
+
+    compacted = parse_response(Karma::Commands.call({
+      v:         2,
+      op:        "replication.entries",
+      after_lsn: 0_u64,
+    }.to_json, cluster))
+    compacted["success"].as_bool.should be_false
+    compacted["error_code"].as_s.should eq("replication_gap")
+
+    current = parse_response(Karma::Commands.call({
+      v:         2,
+      op:        "replication.entries",
+      after_lsn: 2_u64,
+    }.to_json, cluster))
+    current["success"].as_bool.should be_true
+    current["response"]["count"].as_i.should eq(0)
+    current["response"]["source_lsn"].as_i.should eq(2)
+  end
+
   it "allows read-only token to read replication entries" do
     dump_dir = File.expand_path(".spec_replication_entries_auth_#{Time.local.to_unix_ms}")
     Karma.configure do |c|

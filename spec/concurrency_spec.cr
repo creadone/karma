@@ -52,3 +52,56 @@ describe Karma::State do
     restored.get("articles").sum(42_u64).should eq(100_u64)
   end
 end
+
+describe Karma::Wal do
+  it "reads WAL pages while writes rotate segments" do
+    dump_dir = File.expand_path(".spec_concurrent_wal_reads_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.wal_segment_bytes = 512
+    end
+    cluster = Karma::Cluster.new
+    results = Channel(String?).new
+    writes = 200
+    readers = 4
+
+    spawn do
+      begin
+        writes.times do |index|
+          Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: index.to_u64}.to_json, cluster)
+          sleep 1.milliseconds if index % 25 == 0
+        end
+        results.send(nil)
+      rescue ex
+        results.send(ex.message || ex.class.name)
+      end
+    end
+
+    readers.times do |reader_index|
+      spawn do
+        begin
+          writes.times do |index|
+            after_lsn = ((index * (reader_index + 1)) % writes).to_u64
+            entries = Karma::Wal.entries_after(after_lsn, 20, dump_dir)
+            previous_lsn = after_lsn
+            entries.each do |entry|
+              raise "non-monotonic WAL page" unless entry.lsn > previous_lsn
+
+              previous_lsn = entry.lsn
+            end
+            sleep 1.milliseconds if index % 20 == 0
+          end
+          results.send(nil)
+        rescue ex
+          results.send(ex.message || ex.class.name)
+        end
+      end
+    end
+
+    (readers + 1).times do
+      results.receive.should be_nil
+    end
+
+    Karma::Wal.entries_after(0_u64, 10_000, dump_dir).size.should eq(writes)
+  end
+end

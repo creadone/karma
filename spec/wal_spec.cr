@@ -55,6 +55,92 @@ describe Karma::Wal do
     entries.first.entry["key"].as_i.should eq(42)
   end
 
+  it "reads WAL entries appended after building the entry offset index" do
+    dump_dir = File.expand_path(".spec_wal_entries_index_append_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Wal.entries_after(0_u64, 10, dump_dir).map { |entry| entry.lsn }.should eq([1_u64, 2_u64])
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 43_u64}.to_json, cluster)
+
+    entries = Karma::Wal.entries_after(2_u64, 10, dump_dir)
+    entries.map { |entry| entry.lsn }.should eq([3_u64])
+    entries.first.entry["key"].as_i.should eq(43)
+  end
+
+  it "rebuilds the WAL entry offset index after external WAL rewrite" do
+    dump_dir = File.expand_path(".spec_wal_entries_index_rewrite_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 43_u64}.to_json, cluster)
+    Karma::Wal.entries_after(0_u64, 10, dump_dir).map { |entry| entry.lsn }.should eq([1_u64, 2_u64, 3_u64])
+
+    lines = File.read_lines(Karma::Wal.path(dump_dir))
+    File.write(Karma::Wal.path(dump_dir), "#{lines[2]}\n")
+
+    entries = Karma::Wal.entries_after(0_u64, 10, dump_dir)
+    entries.map { |entry| entry.lsn }.should eq([3_u64])
+    entries.first.entry["key"].as_i.should eq(43)
+  end
+
+  it "finds beginning, middle, and tail entries in the active WAL after resetting in-memory indexes" do
+    dump_dir = File.expand_path(".spec_wal_active_binary_tail_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.wal_segment_bytes = 0
+    end
+    cluster = Karma::Cluster.new
+
+    100.times do |index|
+      Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: index.to_u64}.to_json, cluster)
+    end
+
+    Karma::Wal.reset!
+
+    beginning = Karma::Wal.entries_after(0_u64, 3, dump_dir)
+    beginning.map { |entry| entry.lsn }.should eq([1_u64, 2_u64, 3_u64])
+    beginning.map { |entry| entry.entry["key"].as_i }.should eq([0, 1, 2])
+
+    middle = Karma::Wal.entries_after(49_u64, 4, dump_dir)
+    middle.map { |entry| entry.lsn }.should eq([50_u64, 51_u64, 52_u64, 53_u64])
+    middle.map { |entry| entry.entry["key"].as_i }.should eq([49, 50, 51, 52])
+
+    tail = Karma::Wal.entries_after(90_u64, 5, dump_dir)
+    tail.map { |entry| entry.lsn }.should eq([91_u64, 92_u64, 93_u64, 94_u64, 95_u64])
+    tail.map { |entry| entry.entry["key"].as_i }.should eq([90, 91, 92, 93, 94])
+
+    Karma::Wal.entries_after(100_u64, 5, dump_dir).should be_empty
+  end
+
+  it "indexes WAL entries when envelope fields are not in serializer order" do
+    dump_dir = File.expand_path(".spec_wal_entries_index_fallback_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    Dir.mkdir_p(dump_dir)
+    File.write(Karma::Wal.path(dump_dir), {
+      entry: {
+        v:     2,
+        op:    "counter.increment",
+        tree:  "articles",
+        key:   42_u64,
+        date:  20260505_u64,
+        value: 1_u64,
+      },
+      lsn: 1_u64,
+      v:   2,
+    }.to_json + "\n")
+
+    entries = Karma::Wal.entries_after(0_u64, 10, dump_dir)
+
+    entries.map { |entry| entry.lsn }.should eq([1_u64])
+    entries.first.entry["key"].as_i.should eq(42)
+  end
+
   it "reads WAL entries after LSN with byte budget" do
     dump_dir = File.expand_path(".spec_wal_entries_budget_#{Time.local.to_unix_ms}")
     Karma.configure { |c| c.dump_dir = dump_dir }
@@ -84,6 +170,193 @@ describe Karma::Wal do
     expect_raises(Karma::Error, /Single WAL entry/) do
       Karma::Wal.entries_page_after(0_u64, 10, dump_dir, max_bytes: first_entry.response_bytes - 1)
     end
+  end
+
+  it "rotates active WAL into segments and reads entries across them" do
+    dump_dir = File.expand_path(".spec_wal_segments_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.wal_segment_bytes = 1
+    end
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 43_u64}.to_json, cluster)
+
+    segments = Karma::Wal.segment_paths(dump_dir)
+    segments.size.should eq(2)
+    segments.each do |segment_path|
+      index_path = Karma::Wal.segment_index_path(segment_path)
+      File.exists?(index_path).should be_true
+      index_lines = File.read_lines(index_path)
+      segment_lines = File.read_lines(segment_path)
+      segment_size = File.size(segment_path)
+
+      index_lines.first.should eq("KARMA_WAL_INDEX_V1 size=#{segment_size}")
+      index_lines[1..].size.should eq(segment_lines.size)
+      index_lines[1..].each_with_index do |index_line, line_index|
+        parts = index_line.split(' ', remove_empty: true)
+        parts.size.should eq(2)
+        lsn = parts[0].to_u64
+        offset = parts[1].to_i64
+
+        lsn.should eq(JSON.parse(segment_lines[line_index])["lsn"].as_i64.to_u64)
+        offset.should be >= 0
+        offset.should be < segment_size
+      end
+    end
+    File.read_lines(Karma::Wal.path(dump_dir)).size.should eq(1)
+
+    Karma::Wal.reset!
+    entries = Karma::Wal.entries_after(0_u64, 10, dump_dir)
+    entries.map { |entry| entry.lsn }.should eq([1_u64, 2_u64, 3_u64])
+    Karma::Wal.entries_after(1_u64, 10, dump_dir).map { |entry| entry.lsn }.should eq([2_u64, 3_u64])
+    Karma::Wal.current_lsn(dump_dir).should eq(3_u64)
+
+    restored = Karma::Cluster.restore_with_wal(dump_dir)
+    restored.get("articles").sum(41_u64).should eq(1_u64)
+    restored.get("articles").sum(42_u64).should eq(1_u64)
+    restored.get("articles").sum(43_u64).should eq(1_u64)
+
+    report = Karma::Backup.verify(dump_dir)
+    report[:wal_entries_checked].should eq(3)
+    report[:wal_first_lsn].should eq(1_u64)
+    report[:wal_last_lsn].should eq(3_u64)
+  end
+
+  it "falls back to scanning a segment when its sidecar index is stale" do
+    dump_dir = File.expand_path(".spec_wal_segment_stale_index_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.wal_segment_bytes = 1
+    end
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    segment_path = Karma::Wal.segment_paths(dump_dir).first
+    File.write(Karma::Wal.segment_index_path(segment_path), "KARMA_WAL_INDEX_V1 size=0\n999 0\n")
+
+    Karma::Wal.reset!
+    entries = Karma::Wal.entries_after(0_u64, 10, dump_dir)
+
+    entries.map { |entry| entry.lsn }.should eq([1_u64, 2_u64])
+    entries.map { |entry| entry.entry["key"].as_i }.should eq([41, 42])
+  end
+
+  it "falls back to scanning a segment when its sidecar index starts inside a WAL line" do
+    dump_dir = File.expand_path(".spec_wal_segment_bad_index_offset_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.wal_segment_bytes = 1
+    end
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    segment_path = Karma::Wal.segment_paths(dump_dir).first
+    File.write(Karma::Wal.segment_index_path(segment_path), "KARMA_WAL_INDEX_V1 size=#{File.size(segment_path)}\n1 1\n")
+
+    Karma::Wal.reset!
+    entries = Karma::Wal.entries_after(0_u64, 10, dump_dir)
+
+    entries.map { |entry| entry.lsn }.should eq([1_u64, 2_u64])
+    entries.map { |entry| entry.entry["key"].as_i }.should eq([41, 42])
+  end
+
+  it "falls back to scanning a segment when a later sidecar index offset points inside a WAL line" do
+    dump_dir = File.expand_path(".spec_wal_segment_bad_later_index_offset_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.wal_segment_bytes = 10_000
+    end
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    Karma.config.wal_segment_bytes = 1
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 43_u64}.to_json, cluster)
+    segment_path = Karma::Wal.segment_paths(dump_dir).first
+    segment_lines = File.read_lines(segment_path)
+    bad_second_offset = segment_lines.first.bytesize + 2
+    File.write(
+      Karma::Wal.segment_index_path(segment_path),
+      "KARMA_WAL_INDEX_V1 size=#{File.size(segment_path)}\n1 0\n2 #{bad_second_offset}\n"
+    )
+
+    Karma::Wal.reset!
+    entries = Karma::Wal.entries_after(1_u64, 10, dump_dir)
+
+    entries.map { |entry| entry.lsn }.should eq([2_u64, 3_u64])
+    entries.map { |entry| entry.entry["key"].as_i }.should eq([42, 43])
+  end
+
+  it "invalidates cached WAL paths after segment rotation" do
+    dump_dir = File.expand_path(".spec_wal_segment_paths_cache_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.wal_segment_bytes = 1
+    end
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Wal.paths(dump_dir).should eq([Karma::Wal.path(dump_dir)])
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+
+    paths = Karma::Wal.paths(dump_dir)
+    paths.size.should eq(2)
+    paths.first.ends_with?(Karma::Wal::SEGMENT_EXTENSION).should be_true
+    paths.last.should eq(Karma::Wal.path(dump_dir))
+  end
+
+  it "reads entries after cycling through more WAL files than the offset cache holds" do
+    dump_dir = File.expand_path(".spec_wal_entry_offset_cache_eviction_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.wal_segment_bytes = 1
+    end
+    cluster = Karma::Cluster.new
+    entries_count = Karma::Wal::ENTRY_OFFSET_CACHE_FILES + 5
+
+    entries_count.times do |index|
+      Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: index.to_u64}.to_json, cluster)
+    end
+
+    Karma::Wal.reset!
+    entries_count.times do |index|
+      entries = Karma::Wal.entries_after(index.to_u64, 1, dump_dir)
+      entries.map { |entry| entry.lsn }.should eq([(index + 1).to_u64])
+    end
+    Karma::Wal.entries_after(entries_count.to_u64, 1, dump_dir).should be_empty
+  end
+
+  it "removes WAL segments when truncating after snapshots" do
+    dump_dir = File.expand_path(".spec_wal_segments_truncate_#{Time.local.to_unix_ms}")
+    Karma.configure do |c|
+      c.dump_dir = dump_dir
+      c.wal_segment_bytes = 1
+    end
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+    segments = Karma::Wal.segment_paths(dump_dir)
+    segments.should_not be_empty
+    index_paths = segments.map { |segment_path| Karma::Wal.segment_index_path(segment_path) }
+    index_paths.each { |index_path| File.exists?(index_path).should be_true }
+
+    cluster.dump_all
+
+    Karma::Wal.segment_paths(dump_dir).should be_empty
+    index_paths.each { |index_path| File.exists?(index_path).should be_false }
+    File.read(Karma::Wal.path(dump_dir)).should be_empty
+    File.read(Karma::Wal.lsn_path(dump_dir)).strip.should eq("2")
+
+    restored = Karma::Cluster.restore_with_wal(dump_dir)
+    restored.get("articles").sum(41_u64).should eq(1_u64)
+    restored.get("articles").sum(42_u64).should eq(1_u64)
   end
 
   it "skips legacy WAL entries when reading entries after LSN" do
@@ -149,6 +422,27 @@ describe Karma::Wal do
     File.read(Karma::Wal.path(dump_dir)).should be_empty
     File.read(Karma::Wal.lsn_path(dump_dir)).strip.should eq("1")
     restored = Karma::Cluster.restore_with_wal(dump_dir)
+    restored.get("articles").sum(42_u64).should eq(1_u64)
+  end
+
+  it "appends cleanly after truncating an open WAL" do
+    dump_dir = File.expand_path(".spec_wal_append_after_truncate_#{Time.local.to_unix_ms}")
+    Karma.configure { |c| c.dump_dir = dump_dir }
+    cluster = Karma::Cluster.new
+
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 41_u64}.to_json, cluster)
+    cluster.dump_all
+    Karma::Commands.call({v: 2, op: "counter.increment", tree: "articles", key: 42_u64}.to_json, cluster)
+
+    lines = File.read_lines(Karma::Wal.path(dump_dir))
+    lines.size.should eq(1)
+    entry = JSON.parse(lines.first)
+    entry["lsn"].as_i.should eq(2)
+    entry["entry"]["key"].as_i.should eq(42)
+    File.read(Karma::Wal.lsn_path(dump_dir)).strip.should eq("2")
+
+    restored = Karma::Cluster.restore_with_wal(dump_dir)
+    restored.get("articles").sum(41_u64).should eq(1_u64)
     restored.get("articles").sum(42_u64).should eq(1_u64)
   end
 

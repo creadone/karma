@@ -10,6 +10,7 @@ module Karma
     property tcp_nodelay : Bool = true
     property wal : Bool = true
     property wal_fsync : Bool = true
+    property wal_segment_bytes : Int32 = 64 * 1024 * 1024
     property max_request_bytes : Int32 = 4096
     property max_response_bytes : Int32 = 1_048_576
     property read_timeout_seconds : Int32 = 5
@@ -37,6 +38,7 @@ module Karma
       @tcp_nodelay = bool_env("KARMA_TCP_NODELAY", @tcp_nodelay)
       @wal = bool_env("KARMA_WAL", @wal)
       @wal_fsync = bool_env("KARMA_WAL_FSYNC", @wal_fsync)
+      @wal_segment_bytes = int_env("KARMA_WAL_SEGMENT_BYTES", @wal_segment_bytes)
       @max_request_bytes = int_env("KARMA_MAX_REQUEST_BYTES", @max_request_bytes)
       @max_response_bytes = int_env("KARMA_MAX_RESPONSE_BYTES", @max_response_bytes)
       @read_timeout_seconds = int_env("KARMA_READ_TIMEOUT_SECONDS", @read_timeout_seconds)
@@ -61,6 +63,7 @@ module Karma
       raise_validation("port must be between 1 and 65535") unless (1..65_535).includes?(@port)
       raise_validation("dump_dir must not be empty") if @dump_dir.empty?
       raise_validation("role must be master or slave") unless %w[master slave].includes?(@role)
+      raise_validation("wal_segment_bytes must be greater than or equal to 0") unless @wal_segment_bytes >= 0
       raise_validation("max_request_bytes must be greater than 0") unless @max_request_bytes > 0
       raise_validation("max_response_bytes must be greater than or equal to 0") unless @max_response_bytes >= 0
       raise_validation("read_timeout_seconds must be greater than or equal to 0") unless @read_timeout_seconds >= 0

@@ -9,6 +9,7 @@ CLI_ENV_KEYS = %w[
   KARMA_TCP_NODELAY
   KARMA_WAL
   KARMA_WAL_FSYNC
+  KARMA_WAL_SEGMENT_BYTES
   KARMA_MAX_REQUEST_BYTES
   KARMA_MAX_RESPONSE_BYTES
   KARMA_READ_TIMEOUT_SECONDS
@@ -41,6 +42,7 @@ describe Karma::Cli do
       c.tcp_nodelay = true
       c.wal = true
       c.wal_fsync = true
+      c.wal_segment_bytes = 64 * 1024 * 1024
       c.max_request_bytes = 4096
       c.max_response_bytes = 1_048_576
       c.read_timeout_seconds = 5
@@ -65,6 +67,7 @@ describe Karma::Cli do
       "--nodelay=false",
       "--wal=false",
       "--wal-fsync=false",
+      "--wal-segment-bytes=123456",
       "--max-request-bytes=8192",
       "--max-response-bytes=2048",
       "--read-timeout=3",
@@ -90,6 +93,7 @@ describe Karma::Cli do
     Karma.config.tcp_nodelay.should be_false
     Karma.config.wal.should be_false
     Karma.config.wal_fsync.should be_false
+    Karma.config.wal_segment_bytes.should eq(123_456)
     Karma.config.max_request_bytes.should eq(8192)
     Karma.config.max_response_bytes.should eq(2048)
     Karma.config.read_timeout_seconds.should eq(3)
@@ -115,6 +119,7 @@ describe Karma::Cli do
       c.tcp_nodelay = true
       c.wal = true
       c.wal_fsync = true
+      c.wal_segment_bytes = 64 * 1024 * 1024
       c.max_request_bytes = 4096
       c.max_response_bytes = 1_048_576
       c.read_timeout_seconds = 5
@@ -144,6 +149,7 @@ describe Karma::Cli do
       c.tcp_nodelay = true
       c.wal = true
       c.wal_fsync = true
+      c.wal_segment_bytes = 64 * 1024 * 1024
       c.max_request_bytes = 4096
       c.max_response_bytes = 1_048_576
       c.read_timeout_seconds = 5
@@ -169,6 +175,7 @@ describe Karma::Cli do
     ENV["KARMA_TCP_NODELAY"] = "false"
     ENV["KARMA_WAL"] = "false"
     ENV["KARMA_WAL_FSYNC"] = "false"
+    ENV["KARMA_WAL_SEGMENT_BYTES"] = "654321"
     ENV["KARMA_MAX_REQUEST_BYTES"] = "8192"
     ENV["KARMA_MAX_RESPONSE_BYTES"] = "16384"
     ENV["KARMA_READ_TIMEOUT_SECONDS"] = "8"
@@ -195,6 +202,7 @@ describe Karma::Cli do
     Karma.config.tcp_nodelay.should be_false
     Karma.config.wal.should be_true
     Karma.config.wal_fsync.should be_false
+    Karma.config.wal_segment_bytes.should eq(654_321)
     Karma.config.max_request_bytes.should eq(8192)
     Karma.config.max_response_bytes.should eq(16_384)
     Karma.config.read_timeout_seconds.should eq(8)
@@ -221,6 +229,7 @@ describe Karma::Cli do
       c.tcp_nodelay = true
       c.wal = true
       c.wal_fsync = true
+      c.wal_segment_bytes = 64 * 1024 * 1024
       c.max_request_bytes = 4096
       c.max_response_bytes = 1_048_576
       c.read_timeout_seconds = 5
@@ -271,6 +280,7 @@ describe Karma::Cli do
       c.tcp_nodelay = true
       c.wal = true
       c.wal_fsync = true
+      c.wal_segment_bytes = 64 * 1024 * 1024
       c.max_request_bytes = 4096
       c.max_response_bytes = 1_048_576
       c.read_timeout_seconds = 5
@@ -287,6 +297,16 @@ describe Karma::Cli do
       c.read_auth_token = nil
       c.log = false
     end
+  end
+
+  it "validates WAL segment size" do
+    clear_cli_env
+
+    expect_raises(Karma::Error, "Invalid configuration: wal_segment_bytes must be greater than or equal to 0") do
+      Karma::Cli.parse!(["--wal-segment-bytes=-1"])
+    end
+  ensure
+    Karma.configure { |c| c.wal_segment_bytes = 64 * 1024 * 1024 }
   end
 
   it "validates replication role" do

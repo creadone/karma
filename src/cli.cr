@@ -40,6 +40,10 @@ module Karma
           Karma.config.wal_fsync = bool_flag(flag, "--wal-fsync")
         end
 
+        parser.on("--wal-segment-bytes=bytes", "Rotate active WAL after this many bytes; 0 disables rotation (default: #{Karma.config.wal_segment_bytes})") do |bytes|
+          Karma.config.wal_segment_bytes = int_flag(bytes, "--wal-segment-bytes")
+        end
+
         parser.on("--max-request-bytes=bytes", "Maximum request line size (default: #{Karma.config.max_request_bytes})") do |bytes|
           Karma.config.max_request_bytes = int_flag(bytes, "--max-request-bytes")
         end

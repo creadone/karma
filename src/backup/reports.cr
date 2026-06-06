@@ -25,14 +25,13 @@ module Karma
       dump_paths = dumps(dump_dir)
       latest_by_tree = latest_snapshot_metadata_by_tree(dump_dir).map(&.to_response)
 
-      wal_path = Karma::Wal.path(dump_dir)
       {
         dump_count:              dump_paths.size,
         latest_by_tree:          latest_by_tree,
         idempotency_snapshot:    Karma::Idempotency.info(dump_dir).try(&.to_response),
         last_snapshot_lsn:       latest_by_tree.max_of? { |snapshot| snapshot[:last_lsn] } || 0_u64,
         wal_enabled:             Karma::Wal.enabled?,
-        wal_bytes:               File.exists?(wal_path) ? File.size(wal_path) : 0_i64,
+        wal_bytes:               Karma::Wal.bytes(dump_dir),
         wal_current_lsn:         Karma::Wal.current_lsn(dump_dir),
         dump_retention_per_tree: Karma.config.dump_retention_per_tree,
       }
@@ -88,9 +87,9 @@ module Karma
     end
 
     private def self.verify_wal_continuity(dump_dir, snapshot_lsn : UInt64)
-      wal_path = Karma::Wal.path(dump_dir)
+      wal_paths = Karma::Wal.paths(dump_dir)
       lsn_file = read_wal_lsn_file(dump_dir)
-      return empty_wal_report(lsn_file, snapshot_lsn) unless File.exists?(wal_path)
+      return empty_wal_report(lsn_file, snapshot_lsn) if wal_paths.empty?
 
       expected_lsn = snapshot_lsn + 1
       first_lsn : UInt64? = nil
@@ -98,37 +97,39 @@ module Karma
       entries = 0
       legacy_entries = 0
 
-      line_number = 0
-      File.each_line(wal_path) do |line|
-        line_number += 1
-        next if line.blank?
+      wal_paths.each do |wal_path|
+        line_number = 0
+        File.each_line(wal_path) do |line|
+          line_number += 1
+          next if line.blank?
 
-        object = JSON.parse(line).as_h
-        lsn = object["lsn"]?.try(&.as_i64?.try(&.to_u64))
-        entry = object["entry"]?
+          object = JSON.parse(line).as_h
+          lsn = object["lsn"]?.try(&.as_i64?.try(&.to_u64))
+          entry = object["entry"]?
 
-        if lsn.nil? || entry.nil?
-          legacy_entries += 1
-          if snapshot_lsn > 0
-            raise Karma::Error.new("validation_error", "Legacy WAL entry at line #{line_number} cannot be verified after snapshot LSN #{snapshot_lsn}")
+          if lsn.nil? || entry.nil?
+            legacy_entries += 1
+            if snapshot_lsn > 0
+              raise Karma::Error.new("validation_error", "Legacy WAL entry at #{wal_path}:#{line_number} cannot be verified after snapshot LSN #{snapshot_lsn}")
+            end
+            next
           end
-          next
-        end
 
-        if lsn <= snapshot_lsn
-          raise Karma::Error.new("validation_error", "WAL entry LSN #{lsn} is already covered by snapshot LSN #{snapshot_lsn}")
-        end
+          if lsn <= snapshot_lsn
+            raise Karma::Error.new("validation_error", "WAL entry LSN #{lsn} is already covered by snapshot LSN #{snapshot_lsn}")
+          end
 
-        unless lsn == expected_lsn
-          raise Karma::Error.new("validation_error", "WAL LSN gap at line #{line_number}: expected #{expected_lsn}, got #{lsn}")
-        end
+          unless lsn == expected_lsn
+            raise Karma::Error.new("validation_error", "WAL LSN gap at #{wal_path}:#{line_number}: expected #{expected_lsn}, got #{lsn}")
+          end
 
-        first_lsn ||= lsn
-        last_lsn = lsn
-        entries += 1
-        expected_lsn = lsn + 1
-      rescue e : JSON::ParseException
-        raise Karma::Error.new("validation_error", "Invalid WAL JSON at line #{line_number}: #{e.message}")
+          first_lsn ||= lsn
+          last_lsn = lsn
+          entries += 1
+          expected_lsn = lsn + 1
+        rescue e : JSON::ParseException
+          raise Karma::Error.new("validation_error", "Invalid WAL JSON at #{wal_path}:#{line_number}: #{e.message}")
+        end
       end
 
       verify_wal_lsn_file!(lsn_file, snapshot_lsn, last_lsn)
