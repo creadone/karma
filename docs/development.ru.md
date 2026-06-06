@@ -358,7 +358,7 @@ bin/karma_replication_load_test --binary=bin/karma
 * `clients/ruby/` - Ruby/Rails-клиент;
 * `clients/crystal/` - Crystal-клиент.
 
-Клиентский API должен говорить на языке расхода лимитов:
+Crystal-клиент уже содержит доменные методы для расхода лимитов:
 
 * `record_usage`;
 * `set_usage`;
@@ -366,9 +366,11 @@ bin/karma_replication_load_test --binary=bin/karma
 * `usage`;
 * `batch_usage`.
 
-Низкоуровневые методы `request`, `call`, `increment`, `sum`, `batch_add` и
-другие остаются полезными для служебных задач, но продуктовые примеры должны
-начинаться с расхода лимитов.
+Ruby-клиент сейчас предоставляет низкоуровневые методы протокола:
+`create_series`, `increment`, `sum`, `batch_add`, `batch_set`, `request` и
+`call`. Они рабочие, но новые продуктовые примеры должны использовать лимиты
+вроде `api_requests` и `emails_sent`, а не старые `links`/`domains`. Если Ruby
+API расширяется, предпочтительны доменные методы на языке расхода лимитов.
 
 При изменении протокола:
 

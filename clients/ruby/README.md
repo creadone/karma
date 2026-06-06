@@ -63,9 +63,9 @@ Use the pool in Rails request handlers and jobs:
 
 ```ruby
 KarmaClient.with_client do |karma|
-  karma.create_series("links")
-  karma.increment(series: "links", key: 42, bucket: Date.current, value: 1)
-  karma.sum(series: "links", key: 42, from: 7.days.ago.to_date, to: Date.current)
+  karma.create_series("api_requests")
+  karma.increment(series: "api_requests", key: 42, bucket: Date.current, value: 1)
+  karma.sum(series: "api_requests", key: 42, from: 7.days.ago.to_date, to: Date.current)
 end
 ```
 
@@ -73,7 +73,7 @@ Batch reads:
 
 ```ruby
 counts = KarmaClient.with_client do |karma|
-  karma.batch_sum(series: "links", keys: [41, 42, 43])
+  karma.batch_sum(series: "api_requests", keys: [41, 42, 43])
 end
 
 # => [{"key"=>41, "value"=>10}, {"key"=>42, "value"=>15}, ...]
@@ -85,8 +85,8 @@ Multi-series reads:
 KarmaClient.with_client do |karma|
   karma.multi_sum(
     items: [
-      { series: "links", key: 101 },
-      { series: "domains", key: 101 }
+      { series: "api_requests", key: 101 },
+      { series: "emails_sent", key: 101 }
     ],
     from: "2026-05-01",
     to: "2026-05-31"
@@ -101,7 +101,7 @@ KarmaClient.with_client do |karma|
   karma.ingest_begin(stream_id: "import-20260505", mode: "add")
   karma.ingest_chunk(
     stream_id: "import-20260505",
-    series: "links",
+    series: "api_requests",
     chunk_seq: 1,
     items: [[42, "2026-05-05", 10]]
   )
@@ -115,11 +115,11 @@ Idempotent writes:
 response = KarmaClient.with_client do |karma|
   karma.request(
     "counter.increment",
-    series: "links",
+    series: "api_requests",
     key: 42,
     bucket: Date.current,
     value: 1,
-    idempotency_key: "click-event-123"
+    idempotency_key: "usage-event-123"
   )
 end
 
@@ -182,7 +182,7 @@ Every v2 operation is available through `call`:
 
 ```ruby
 KarmaClient.with_client do |karma|
-  karma.call("tree.keys", series: "links", limit: 1000, cursor: 0)
+  karma.call("tree.keys", series: "api_requests", limit: 1000, cursor: 0)
 end
 ```
 
