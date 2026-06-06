@@ -1,12 +1,12 @@
 # Karma
 
-Karma - небольшая служба TCP для быстрых счетчиков, разложенных по дням.
+Karma - небольшая служба TCP для быстрого учета расхода лимитов по дням.
 
-Она нужна там, где приложению на каждом запросе требуются свежие итоги по
-множеству идентификаторов, а обращаться за этим к тяжелой аналитической базе
-слишком дорого. Karma держит счетчики в памяти, сохраняет принятые записи через
-снимки состояния и журнал упреждающей записи (WAL), а по сети принимает JSON по
-одной строке на запрос.
+Она нужна там, где приложению на каждом запросе требуется свежий расход
+лимитов по множеству субъектов, а обращаться за этим к тяжелой аналитической
+базе слишком дорого. Karma держит счетчики расхода в памяти, сохраняет принятые
+записи через снимки состояния и журнал упреждающей записи (WAL), а по сети
+принимает JSON по одной строке на запрос.
 
 Английская версия: [README.md](README.md).
 
@@ -15,17 +15,17 @@ Karma - небольшая служба TCP для быстрых счетчик
 Типичный поток:
 
 ```text
-приложение читает основные объекты
-  -> приложение просит Karma вернуть счетчики по идентификаторам
-  -> ответ содержит свежие заранее посчитанные итоги
+приложение читает аккаунты, пользователей или рабочие области
+  -> приложение просит Karma вернуть текущий расход лимита по идентификаторам
+  -> ответ содержит свежие заранее посчитанные итоги расхода
 ```
 
-Karma - узкая модель быстрых чтений для счетчиков, а не универсальная база
-временных рядов.
+Karma - узкая модель быстрых чтений для расхода лимитов, а не универсальная
+база временных рядов.
 
 Поддерживается:
 
-* беззнаковые 64-битные счетчики по ряду, ключу и дню UTC;
+* беззнаковые 64-битные счетчики расхода по имени лимита, субъекту и дню UTC;
 * одиночные и пакетные чтения/записи;
 * идемпотентные записи для производителей с доставкой "как минимум один раз";
 * большие перестроения данных через потоковую загрузку;
@@ -57,13 +57,13 @@ bin/karma \
   --wal=true
 ```
 
-Записать и прочитать счетчик:
+Записать и прочитать расход лимита:
 
 ```sh
-printf '{"v":2,"op":"counter.increment","series":"links","key":42,"value":1}\n' \
+printf '{"v":2,"op":"counter.increment","series":"api_requests","key":42,"value":1}\n' \
   | nc 127.0.0.1 8080
 
-printf '{"v":2,"op":"counter.sum","series":"links","key":42}\n' \
+printf '{"v":2,"op":"counter.sum","series":"api_requests","key":42}\n' \
   | nc 127.0.0.1 8080
 ```
 
@@ -97,8 +97,8 @@ docker run --rm \
 
 | Термин | Значение |
 | --- | --- |
-| `series` | Именованный ряд счетчиков, например `links` или `domains`. |
-| `key` | Беззнаковый 64-битный идентификатор внутри ряда. |
+| `series` | Имя лимита, например `api_requests` или `emails_sent`. |
+| `key` | Беззнаковый 64-битный идентификатор субъекта внутри лимита: аккаунт, пользователь, рабочая область или проект. |
 | `bucket` | День UTC в формате `YYYYMMDD`. Если день не указан при записи, используется текущий день UTC. |
 | `value` | Беззнаковое 64-битное значение. Счетчики не уходят ниже нуля. |
 
@@ -117,7 +117,7 @@ Karma 1.0 принимает только протокол v2:
 Пример:
 
 ```json
-{"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":1}
+{"v":2,"op":"counter.increment","series":"api_requests","key":42,"bucket":20260505,"value":1}
 ```
 
 Ответ с ошибкой:
@@ -156,26 +156,26 @@ Karma 1.0 принимает только протокол v2:
 
 ## Основные операции
 
-### Счетчики
+### Расход лимитов
 
 ```json
-{"v":2,"op":"tree.create","series":"links"}
-{"v":2,"op":"counter.increment","series":"links","key":42,"value":1}
-{"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":10}
-{"v":2,"op":"counter.decrement","series":"links","key":42,"bucket":20260505,"value":1}
-{"v":2,"op":"counter.sum","series":"links","key":42}
-{"v":2,"op":"counter.sum","series":"links","key":42,"range":{"from":20260501,"to":20260505}}
-{"v":2,"op":"counter.series","series":"links","key":42,"range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"tree.create","series":"api_requests"}
+{"v":2,"op":"counter.increment","series":"api_requests","key":42,"value":1}
+{"v":2,"op":"counter.increment","series":"api_requests","key":42,"bucket":20260505,"value":10}
+{"v":2,"op":"counter.decrement","series":"api_requests","key":42,"bucket":20260505,"value":1}
+{"v":2,"op":"counter.sum","series":"api_requests","key":42}
+{"v":2,"op":"counter.sum","series":"api_requests","key":42,"range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"counter.series","series":"api_requests","key":42,"range":{"from":20260501,"to":20260505}}
 ```
 
 ### Пакетные чтения и записи
 
 ```json
-{"v":2,"op":"counter.batch_sum","series":"links","keys":[41,42,43]}
-{"v":2,"op":"counter.batch_sum","series":"links","keys":[41,42,43],"range":{"from":20260501,"to":20260505}}
-{"v":2,"op":"counter.multi_sum","items":[{"series":"links","key":101},{"series":"domains","key":101}]}
-{"v":2,"op":"series.batch_add","series":"links","items":[[42,20260505,10],[43,20260505,3]]}
-{"v":2,"op":"series.batch_set","series":"links","items":[[42,20260505,10],[43,20260505,0]]}
+{"v":2,"op":"counter.batch_sum","series":"api_requests","keys":[41,42,43]}
+{"v":2,"op":"counter.batch_sum","series":"api_requests","keys":[41,42,43],"range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"counter.multi_sum","items":[{"series":"api_requests","key":101},{"series":"emails_sent","key":101}]}
+{"v":2,"op":"series.batch_add","series":"api_requests","items":[[42,20260505,10],[43,20260505,3]]}
+{"v":2,"op":"series.batch_set","series":"api_requests","items":[[42,20260505,10],[43,20260505,0]]}
 ```
 
 `series.batch_set` записывает точные значения по дням. Нулевое значение удаляет
@@ -186,24 +186,24 @@ Karma 1.0 принимает только протокол v2:
 
 ```json
 {"v":2,"op":"tree.list"}
-{"v":2,"op":"tree.info","series":"links"}
-{"v":2,"op":"tree.keys","series":"links","limit":1000,"cursor":0}
-{"v":2,"op":"tree.summary","series":"links","range":{"from":20260501,"to":20260505}}
-{"v":2,"op":"tree.top","series":"links","limit":100}
-{"v":2,"op":"series.delete_before","series":"links","before":20260401}
-{"v":2,"op":"series.compact","series":"links"}
+{"v":2,"op":"tree.info","series":"api_requests"}
+{"v":2,"op":"tree.keys","series":"api_requests","limit":1000,"cursor":0}
+{"v":2,"op":"tree.summary","series":"api_requests","range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"tree.top","series":"api_requests","limit":100}
+{"v":2,"op":"series.delete_before","series":"api_requests","before":20260401}
+{"v":2,"op":"series.compact","series":"api_requests"}
 {"v":2,"op":"system.compact"}
 ```
 
 ### Удаление и сброс
 
 ```json
-{"v":2,"op":"counter.reset","series":"links","key":42}
-{"v":2,"op":"counter.batch_reset","series":"links","keys":[41,42,43]}
-{"v":2,"op":"tree.reset","series":"links"}
-{"v":2,"op":"counter.delete_range","series":"links","key":42,"range":{"from":20260501,"to":20260505}}
-{"v":2,"op":"counter.batch_delete_range","series":"links","keys":[41,42,43],"range":{"from":20260501,"to":20260505}}
-{"v":2,"op":"tree.delete_range","series":"links","range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"counter.reset","series":"api_requests","key":42}
+{"v":2,"op":"counter.batch_reset","series":"api_requests","keys":[41,42,43]}
+{"v":2,"op":"tree.reset","series":"api_requests"}
+{"v":2,"op":"counter.delete_range","series":"api_requests","key":42,"range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"counter.batch_delete_range","series":"api_requests","keys":[41,42,43],"range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"tree.delete_range","series":"api_requests","range":{"from":20260501,"to":20260505}}
 ```
 
 ## Идемпотентные записи
@@ -216,7 +216,7 @@ Karma 1.0 принимает только протокол v2:
 Пример:
 
 ```json
-{"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":1,"idempotency_key":"click-event-123"}
+{"v":2,"op":"counter.increment","series":"api_requests","key":42,"bucket":20260505,"value":1,"idempotency_key":"usage-event-123"}
 ```
 
 Поддерживаемые команды:
@@ -249,7 +249,7 @@ Karma 1.0 принимает только протокол v2:
 
 ```json
 {"v":2,"op":"ingest.begin","stream_id":"import-20260505","mode":"add","granularity":"day"}
-{"v":2,"op":"ingest.chunk","stream_id":"import-20260505","series":"links","chunk_seq":1,"items":[[42,20260505,10]]}
+{"v":2,"op":"ingest.chunk","stream_id":"import-20260505","series":"api_requests","chunk_seq":1,"items":[[42,20260505,10]]}
 {"v":2,"op":"ingest.commit","stream_id":"import-20260505"}
 ```
 
@@ -279,7 +279,7 @@ Karma сохраняет данные двумя способами:
 Команды снимков:
 
 ```json
-{"v":2,"op":"snapshot.create","series":"links"}
+{"v":2,"op":"snapshot.create","series":"api_requests"}
 {"v":2,"op":"snapshot.create_all"}
 {"v":2,"op":"snapshot.list"}
 {"v":2,"op":"snapshot.info"}
@@ -289,15 +289,15 @@ Karma сохраняет данные двумя способами:
 Скачать или загрузить снимок:
 
 ```json
-{"v":2,"op":"snapshot.load","file":"1777925811_links.tree"}
-{"v":2,"op":"snapshot.fetch","file":"1777925811_links.tree"}
-{"v":2,"op":"snapshot.fetch_chunk","file":"1777925811_links.tree","offset":0,"limit":262144}
+{"v":2,"op":"snapshot.load","file":"1777925811_api_requests.tree"}
+{"v":2,"op":"snapshot.fetch","file":"1777925811_api_requests.tree"}
+{"v":2,"op":"snapshot.fetch_chunk","file":"1777925811_api_requests.tree","offset":0,"limit":262144}
 ```
 
 Новые записи журнала используют v2-обертку с LSN:
 
 ```json
-{"v":2,"lsn":1,"entry":{"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":1}}
+{"v":2,"lsn":1,"entry":{"v":2,"op":"counter.increment","series":"api_requests","key":42,"bucket":20260505,"value":1}}
 ```
 
 При старте с `--restore=true` Karma загружает последний снимок каждого ряда и
@@ -308,9 +308,9 @@ Karma сохраняет данные двумя способами:
 Метки восстановления для внешних процессов:
 
 ```json
-{"v":2,"op":"recovery.checkpoint","source":"clickhouse-links","offset":"export-2026-05-05","event_id":"batch-42"}
+{"v":2,"op":"recovery.checkpoint","source":"usage-export","offset":"export-2026-05-05","event_id":"batch-42"}
 {"v":2,"op":"recovery.status"}
-{"v":2,"op":"recovery.status","source":"clickhouse-links"}
+{"v":2,"op":"recovery.status","source":"usage-export"}
 {"v":2,"op":"reconciliation.report","checked_points":1000,"mismatch_count":2,"absolute_drift":15,"max_abs_delta":10}
 ```
 
@@ -410,6 +410,23 @@ bin/karma \
 
 ## Клиенты
 
+Клиент Crystal:
+
+```yaml
+dependencies:
+  karma_client:
+    path: clients/crystal
+```
+
+```crystal
+KarmaClient.with_client do |karma|
+  karma.record_usage("api_requests", subject_id: 42, amount: 1, day: Time.utc)
+  karma.usage("api_requests", subject_id: 42)
+end
+```
+
+Подробнее: [clients/crystal](clients/crystal).
+
 Клиент Ruby/Rails:
 
 ```ruby
@@ -427,7 +444,7 @@ require "json"
 require "socket"
 
 socket = TCPSocket.new("127.0.0.1", 8080)
-socket.write({v: 2, op: "counter.sum", series: "links", key: 42}.to_json + "\n")
+socket.write({v: 2, op: "counter.sum", series: "api_requests", key: 42}.to_json + "\n")
 puts socket.gets
 socket.close
 ```
@@ -489,6 +506,8 @@ bin/karma_tcp_load_test --clients=4 --wal=true --wal-fsync=false
   и продолжить работу.
 
 ## Разработка
+
+Подробная документация для разработчиков: [docs/development.ru.md](docs/development.ru.md).
 
 ```sh
 crystal spec

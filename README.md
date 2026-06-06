@@ -1,11 +1,11 @@
 # Karma
 
-Karma is a small TCP service for high-throughput, day-bucketed counters.
+Karma is a small TCP service for high-throughput, day-bucketed limit usage.
 
-Use it when an application needs fresh totals for many ids on every request and
-an analytical database is too heavy for that hot path. Karma keeps counters in
-memory, persists accepted writes through snapshots and a write-ahead log (WAL),
-and speaks newline-delimited JSON over TCP.
+Use it when an application needs fresh usage totals for many subjects on every
+request and an analytical database is too heavy for that hot path. Karma keeps
+usage counters in memory, persists accepted writes through snapshots and a
+write-ahead log (WAL), and speaks newline-delimited JSON over TCP.
 
 Russian version: [README.ru.md](README.ru.md).
 
@@ -14,17 +14,17 @@ Russian version: [README.ru.md](README.ru.md).
 Typical flow:
 
 ```text
-application loads business objects
-  -> application asks Karma for counters by id
-  -> response returns fresh pre-aggregated totals
+application loads accounts, users, or workspaces
+  -> application asks Karma for current limit usage by subject id
+  -> response returns fresh pre-aggregated usage totals
 ```
 
-Karma is a focused read model for counters, not a general-purpose time-series
-database.
+Karma is a focused read model for limit usage, not a general-purpose
+time-series database.
 
 It supports:
 
-* unsigned 64-bit counters grouped by series, key, and UTC day bucket;
+* unsigned 64-bit usage counters grouped by limit name, subject id, and UTC day bucket;
 * single and batch reads/writes;
 * idempotent writes for at-least-once producers;
 * large rebuilds through streaming ingest;
@@ -54,13 +54,13 @@ bin/karma \
   --wal=true
 ```
 
-Write and read a counter:
+Write and read usage for a limit:
 
 ```sh
-printf '{"v":2,"op":"counter.increment","series":"links","key":42,"value":1}\n' \
+printf '{"v":2,"op":"counter.increment","series":"api_requests","key":42,"value":1}\n' \
   | nc 127.0.0.1 8080
 
-printf '{"v":2,"op":"counter.sum","series":"links","key":42}\n' \
+printf '{"v":2,"op":"counter.sum","series":"api_requests","key":42}\n' \
   | nc 127.0.0.1 8080
 ```
 
@@ -94,8 +94,8 @@ snapshots.
 
 | Term | Meaning |
 | --- | --- |
-| `series` | Named counter collection, for example `links` or `domains`. |
-| `key` | Unsigned 64-bit id inside a series. |
+| `series` | Limit name, for example `api_requests` or `emails_sent`. |
+| `key` | Unsigned 64-bit subject id inside a limit, for example account, user, workspace, or project id. |
 | `bucket` | UTC day in `YYYYMMDD` format. If omitted on writes, Karma uses today's UTC bucket. |
 | `value` | Unsigned 64-bit amount. Counters never go below zero. |
 
@@ -113,7 +113,7 @@ Karma 1.0 accepts only protocol v2 requests:
 Example:
 
 ```json
-{"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":1}
+{"v":2,"op":"counter.increment","series":"api_requests","key":42,"bucket":20260505,"value":1}
 ```
 
 Error response:
@@ -152,26 +152,26 @@ never written to the WAL.
 
 ## Common Operations
 
-### Counters
+### Limit Usage
 
 ```json
-{"v":2,"op":"tree.create","series":"links"}
-{"v":2,"op":"counter.increment","series":"links","key":42,"value":1}
-{"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":10}
-{"v":2,"op":"counter.decrement","series":"links","key":42,"bucket":20260505,"value":1}
-{"v":2,"op":"counter.sum","series":"links","key":42}
-{"v":2,"op":"counter.sum","series":"links","key":42,"range":{"from":20260501,"to":20260505}}
-{"v":2,"op":"counter.series","series":"links","key":42,"range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"tree.create","series":"api_requests"}
+{"v":2,"op":"counter.increment","series":"api_requests","key":42,"value":1}
+{"v":2,"op":"counter.increment","series":"api_requests","key":42,"bucket":20260505,"value":10}
+{"v":2,"op":"counter.decrement","series":"api_requests","key":42,"bucket":20260505,"value":1}
+{"v":2,"op":"counter.sum","series":"api_requests","key":42}
+{"v":2,"op":"counter.sum","series":"api_requests","key":42,"range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"counter.series","series":"api_requests","key":42,"range":{"from":20260501,"to":20260505}}
 ```
 
 ### Batch Reads and Writes
 
 ```json
-{"v":2,"op":"counter.batch_sum","series":"links","keys":[41,42,43]}
-{"v":2,"op":"counter.batch_sum","series":"links","keys":[41,42,43],"range":{"from":20260501,"to":20260505}}
-{"v":2,"op":"counter.multi_sum","items":[{"series":"links","key":101},{"series":"domains","key":101}]}
-{"v":2,"op":"series.batch_add","series":"links","items":[[42,20260505,10],[43,20260505,3]]}
-{"v":2,"op":"series.batch_set","series":"links","items":[[42,20260505,10],[43,20260505,0]]}
+{"v":2,"op":"counter.batch_sum","series":"api_requests","keys":[41,42,43]}
+{"v":2,"op":"counter.batch_sum","series":"api_requests","keys":[41,42,43],"range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"counter.multi_sum","items":[{"series":"api_requests","key":101},{"series":"emails_sent","key":101}]}
+{"v":2,"op":"series.batch_add","series":"api_requests","items":[[42,20260505,10],[43,20260505,3]]}
+{"v":2,"op":"series.batch_set","series":"api_requests","items":[[42,20260505,10],[43,20260505,0]]}
 ```
 
 `series.batch_set` writes exact bucket values. A zero value deletes that bucket.
@@ -181,24 +181,24 @@ Large requests must fit `--max-request-bytes`.
 
 ```json
 {"v":2,"op":"tree.list"}
-{"v":2,"op":"tree.info","series":"links"}
-{"v":2,"op":"tree.keys","series":"links","limit":1000,"cursor":0}
-{"v":2,"op":"tree.summary","series":"links","range":{"from":20260501,"to":20260505}}
-{"v":2,"op":"tree.top","series":"links","limit":100}
-{"v":2,"op":"series.delete_before","series":"links","before":20260401}
-{"v":2,"op":"series.compact","series":"links"}
+{"v":2,"op":"tree.info","series":"api_requests"}
+{"v":2,"op":"tree.keys","series":"api_requests","limit":1000,"cursor":0}
+{"v":2,"op":"tree.summary","series":"api_requests","range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"tree.top","series":"api_requests","limit":100}
+{"v":2,"op":"series.delete_before","series":"api_requests","before":20260401}
+{"v":2,"op":"series.compact","series":"api_requests"}
 {"v":2,"op":"system.compact"}
 ```
 
 ### Deletes and Resets
 
 ```json
-{"v":2,"op":"counter.reset","series":"links","key":42}
-{"v":2,"op":"counter.batch_reset","series":"links","keys":[41,42,43]}
-{"v":2,"op":"tree.reset","series":"links"}
-{"v":2,"op":"counter.delete_range","series":"links","key":42,"range":{"from":20260501,"to":20260505}}
-{"v":2,"op":"counter.batch_delete_range","series":"links","keys":[41,42,43],"range":{"from":20260501,"to":20260505}}
-{"v":2,"op":"tree.delete_range","series":"links","range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"counter.reset","series":"api_requests","key":42}
+{"v":2,"op":"counter.batch_reset","series":"api_requests","keys":[41,42,43]}
+{"v":2,"op":"tree.reset","series":"api_requests"}
+{"v":2,"op":"counter.delete_range","series":"api_requests","key":42,"range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"counter.batch_delete_range","series":"api_requests","keys":[41,42,43],"range":{"from":20260501,"to":20260505}}
+{"v":2,"op":"tree.delete_range","series":"api_requests","range":{"from":20260501,"to":20260505}}
 ```
 
 ## Idempotent Writes
@@ -211,7 +211,7 @@ returns `idempotency_conflict`.
 Example:
 
 ```json
-{"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":1,"idempotency_key":"click-event-123"}
+{"v":2,"op":"counter.increment","series":"api_requests","key":42,"bucket":20260505,"value":1,"idempotency_key":"usage-event-123"}
 ```
 
 Eligible commands:
@@ -244,7 +244,7 @@ Example:
 
 ```json
 {"v":2,"op":"ingest.begin","stream_id":"import-20260505","mode":"add","granularity":"day"}
-{"v":2,"op":"ingest.chunk","stream_id":"import-20260505","series":"links","chunk_seq":1,"items":[[42,20260505,10]]}
+{"v":2,"op":"ingest.chunk","stream_id":"import-20260505","series":"api_requests","chunk_seq":1,"items":[[42,20260505,10]]}
 {"v":2,"op":"ingest.commit","stream_id":"import-20260505"}
 ```
 
@@ -274,7 +274,7 @@ indexes that map LSN to byte offset for fast replication catch-up.
 Snapshot commands:
 
 ```json
-{"v":2,"op":"snapshot.create","series":"links"}
+{"v":2,"op":"snapshot.create","series":"api_requests"}
 {"v":2,"op":"snapshot.create_all"}
 {"v":2,"op":"snapshot.list"}
 {"v":2,"op":"snapshot.info"}
@@ -284,15 +284,15 @@ Snapshot commands:
 Fetch or load snapshots:
 
 ```json
-{"v":2,"op":"snapshot.load","file":"1777925811_links.tree"}
-{"v":2,"op":"snapshot.fetch","file":"1777925811_links.tree"}
-{"v":2,"op":"snapshot.fetch_chunk","file":"1777925811_links.tree","offset":0,"limit":262144}
+{"v":2,"op":"snapshot.load","file":"1777925811_api_requests.tree"}
+{"v":2,"op":"snapshot.fetch","file":"1777925811_api_requests.tree"}
+{"v":2,"op":"snapshot.fetch_chunk","file":"1777925811_api_requests.tree","offset":0,"limit":262144}
 ```
 
 New WAL entries use a v2 LSN envelope:
 
 ```json
-{"v":2,"lsn":1,"entry":{"v":2,"op":"counter.increment","series":"links","key":42,"bucket":20260505,"value":1}}
+{"v":2,"lsn":1,"entry":{"v":2,"op":"counter.increment","series":"api_requests","key":42,"bucket":20260505,"value":1}}
 ```
 
 Startup with `--restore=true` loads the latest snapshot per series and replays
@@ -303,9 +303,9 @@ old snapshots according to `--dump-retention-per-tree`.
 Recovery markers for external pipelines:
 
 ```json
-{"v":2,"op":"recovery.checkpoint","source":"clickhouse-links","offset":"export-2026-05-05","event_id":"batch-42"}
+{"v":2,"op":"recovery.checkpoint","source":"usage-export","offset":"export-2026-05-05","event_id":"batch-42"}
 {"v":2,"op":"recovery.status"}
-{"v":2,"op":"recovery.status","source":"clickhouse-links"}
+{"v":2,"op":"recovery.status","source":"usage-export"}
 {"v":2,"op":"reconciliation.report","checked_points":1000,"mismatch_count":2,"absolute_drift":15,"max_abs_delta":10}
 ```
 
@@ -404,6 +404,23 @@ Watch these in production:
 
 ## Clients
 
+Crystal client:
+
+```yaml
+dependencies:
+  karma_client:
+    path: clients/crystal
+```
+
+```crystal
+KarmaClient.with_client do |karma|
+  karma.record_usage("api_requests", subject_id: 42, amount: 1, day: Time.utc)
+  karma.usage("api_requests", subject_id: 42)
+end
+```
+
+See [clients/crystal](clients/crystal).
+
 Ruby/Rails client:
 
 ```ruby
@@ -421,7 +438,7 @@ require "json"
 require "socket"
 
 socket = TCPSocket.new("127.0.0.1", 8080)
-socket.write({v: 2, op: "counter.sum", series: "links", key: 42}.to_json + "\n")
+socket.write({v: 2, op: "counter.sum", series: "api_requests", key: 42}.to_json + "\n")
 puts socket.gets
 socket.close
 ```
@@ -480,6 +497,8 @@ More scripts are in [scripts](scripts).
   keep running.
 
 ## Development
+
+Developer documentation in Russian: [docs/development.ru.md](docs/development.ru.md).
 
 ```sh
 crystal spec
