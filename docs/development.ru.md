@@ -9,7 +9,7 @@ audience:
   - sre
   - ai-agent
 status: active
-version: 1.0.0
+version: 1.0.1
 last_reviewed: 2026-06-06
 source_of_truth:
   - README.ru.md
