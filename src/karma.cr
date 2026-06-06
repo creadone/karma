@@ -1,11 +1,11 @@
 require "socket"
-require "counter_tree"
 
 require "./version"
 require "./error"
 require "./config"
 require "./protocol"
 require "./time_series"
+require "./bucketed_counter"
 require "./idempotency"
 require "./ingest"
 require "./recovery"

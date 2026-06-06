@@ -283,7 +283,7 @@ module Karma
       jobs.each { |job| job.result.send(error) }
     end
 
-    private def self.preflight_fast_increment_group(tree : CounterTree::Tree?, jobs : Array(FastIncrementJob)) : Nil
+    private def self.preflight_fast_increment_group(tree : Karma::BucketedCounter::Store?, jobs : Array(FastIncrementJob)) : Nil
       bucket_totals = {} of Tuple(UInt64, UInt64) => UInt64
       counter_totals = {} of UInt64 => UInt64
 
@@ -306,19 +306,19 @@ module Karma
       end
     end
 
-    private def self.fast_tree(cluster, series_name : String) : CounterTree::Tree?
+    private def self.fast_tree(cluster, series_name : String) : Karma::BucketedCounter::Store?
       Karma::State.synchronize_registry do
         cluster.trees[series_name]?
       end
     end
 
-    private def self.fast_tree_required(series_name : String, cluster) : CounterTree::Tree
+    private def self.fast_tree_required(series_name : String, cluster) : Karma::BucketedCounter::Store
       fast_tree(cluster, series_name) || raise Karma::Error.new("not_found", "Tree \"#{series_name}\" not found")
     end
 
-    private def self.fast_tree_or_create(cluster, series_name : String) : CounterTree::Tree
+    private def self.fast_tree_or_create(cluster, series_name : String) : Karma::BucketedCounter::Store
       Karma::State.synchronize_registry do
-        cluster.trees[series_name] ||= CounterTree::Tree.new
+        cluster.trees[series_name] ||= Karma::BucketedCounter::Store.new
       end
     end
 
@@ -365,7 +365,7 @@ module Karma
       elsif tree
         tree.increment(key, bucket, value)
       else
-        tree = CounterTree::Tree.new
+        tree = Karma::BucketedCounter::Store.new
         cluster.trees[series_name] = tree
         tree.increment(key, bucket, value)
       end
@@ -376,10 +376,10 @@ module Karma
       when "increment"
         preflight_increment(directive, cluster)
       when "batch_add"
-        tree = cluster.trees[directive.series_name]? || CounterTree::Tree.new
+        tree = cluster.trees[directive.series_name]? || Karma::BucketedCounter::Store.new
         Commands::BatchAdd.preflight!(tree, directive.items.not_nil!)
       when "batch_set"
-        tree = cluster.trees[directive.series_name]? || CounterTree::Tree.new
+        tree = cluster.trees[directive.series_name]? || Karma::BucketedCounter::Store.new
         Commands::BatchSet.preflight!(tree, directive.items.not_nil!)
       when "batch_reset", "batch_delete_range"
         cluster.get(directive.series_name)
@@ -387,7 +387,7 @@ module Karma
     end
 
     private def self.preflight_increment(directive : Directive, cluster) : Nil
-      tree = cluster.trees[directive.series_name]? || CounterTree::Tree.new
+      tree = cluster.trees[directive.series_name]? || Karma::BucketedCounter::Store.new
       counter = tree.get(directive.key_value)
       current = counter.try(&.table[directive.write_bucket.value]?) || 0_u64
       if UInt64::MAX - current < directive.write_value

@@ -2,7 +2,6 @@ FROM crystallang/crystal:1.17.1-alpine AS build
 
 WORKDIR /app
 COPY shard.yml shard.lock ./
-COPY lib/counter_tree ./lib/counter_tree
 COPY src ./src
 
 RUN shards install --production

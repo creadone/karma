@@ -6,7 +6,7 @@ module Karma
       getter granularity : String?
       property last_chunk_seq : UInt64
       property series_name : String?
-      property staged_tree : CounterTree::Tree?
+      property staged_tree : Karma::BucketedCounter::Store?
       property begin_fingerprint : String
       getter chunk_fingerprints : Hash(UInt64, String)
 

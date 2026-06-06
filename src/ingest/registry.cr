@@ -103,7 +103,7 @@ module Karma
       stream = stream!(stream_id)
       if stream.mode == "replace_series"
         series_name = stream.series_name || raise Karma::Error.new("validation_error", "Cannot commit empty replace_series stream")
-        staged_tree = stream.staged_tree || CounterTree::Tree.new
+        staged_tree = stream.staged_tree || Karma::BucketedCounter::Store.new
         cluster.replace(series_name, staged_tree)
       end
       @@streams.delete(stream_id)

@@ -1,11 +1,11 @@
 module Karma
   class Cluster
     def dump(name : String) : Slice(UInt8)
-      CounterTree.dump(@trees[name])
+      Karma::BucketedCounter.dump(@trees[name])
     end
 
     def load(name : String, io : Slice(UInt8)) : Bool
-      @trees[name] = CounterTree.load(io)
+      @trees[name] = Karma::BucketedCounter.load(io)
       true
     end
 

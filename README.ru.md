@@ -511,12 +511,13 @@ bin/karma_tcp_load_test --clients=4 --wal=true --wal-fsync=false
 
 ```sh
 crystal spec
-crystal spec lib/counter_tree/spec
+crystal spec spec/bucketed_counter
 shards build --release
 ```
 
-Библиотека `counter_tree` хранится внутри репозитория:
-[lib/counter_tree](lib/counter_tree).
+Структура данных `Karma::BucketedCounter` находится в
+[src/bucketed_counter.cr](src/bucketed_counter.cr) и
+[src/bucketed_counter](src/bucketed_counter).
 
 ## Лицензия
 

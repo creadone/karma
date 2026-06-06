@@ -101,8 +101,10 @@ env CRYSTAL_CACHE_DIR=.crystal-cache-spec crystal spec
 | WAL | Журнал упреждающей записи `karma.wal` и его сегменты. |
 | LSN | Монотонный номер записи WAL. Используется восстановлением и репликацией. |
 
-Внутри кода еще встречаются исторические имена `tree`, `series` и `counter`.
-Не добавляйте новые пользовательские формулировки вокруг `links`, `domains` и
+Внутренняя структура данных называется `Karma::BucketedCounter::Store`.
+Историческое слово `tree` осталось во внешнем протоколе v2, метриках и файлах
+снимков `.tree`; эти имена меняются только через отдельную миграцию формата. Не
+добавляйте новые пользовательские формулировки вокруг `links`, `domains` и
 других старых примеров. Для новых примеров используйте `api_requests`,
 `emails_sent` или другой лимит расхода.
 
@@ -116,7 +118,7 @@ env CRYSTAL_CACHE_DIR=.crystal-cache-spec crystal spec
 | `src/server.cr`, `src/server/client_session.cr` | TCP-сервер, сессия клиента, чтение строк JSON и запись ответов. |
 | `src/command.cr` | Главный pipeline обработки запроса и быстрый путь для горячих команд. |
 | `src/commands/` | Парсер v2, валидация, registry и обработчики команд. |
-| `src/cluster.cr`, `src/cluster/` | In-memory состояние лимитов поверх `CounterTree::Tree`. |
+| `src/cluster.cr`, `src/cluster/` | In-memory состояние лимитов поверх `Karma::BucketedCounter::Store`. |
 | `src/state.cr` | Синхронизация реестра лимитов, per-series блокировки и эксклюзивные операции. |
 | `src/wal/` | Запись, сегментация, LSN, replay и постраничное чтение WAL. |
 | `src/backup/` | Снимки состояния, metadata, проверка восстановления. |
@@ -124,7 +126,7 @@ env CRYSTAL_CACHE_DIR=.crystal-cache-spec crystal spec
 | `src/ingest/` | Потоковая загрузка и режимы `add`, `set`, `replace_series`. |
 | `src/replication/` | Bootstrap снимков и polling WAL от ведущего узла. |
 | `src/operations/` | Stats, metrics и Prometheus-формат. |
-| `lib/counter_tree/` | Локальная библиотека структуры данных счетчиков. |
+| `src/bucketed_counter.cr`, `src/bucketed_counter/` | Внутренняя структура данных `Karma::BucketedCounter`: ключ -> bucket -> value с кешированным total. |
 | `clients/ruby/` | Ruby/Rails-клиент протокола v2. |
 | `clients/crystal/` | Crystal-клиент протокола v2 и доменный API расхода лимитов. |
 | `scripts/` | Нагрузочные, WAL и вспомогательные проверки. |
@@ -402,6 +404,7 @@ crystal spec spec/command_spec.cr
 crystal spec spec/wal_spec.cr
 crystal spec spec/replication_spec.cr
 crystal spec spec/idempotency_spec.cr
+crystal spec spec/bucketed_counter
 crystal spec clients/crystal/spec
 ruby clients/ruby/test/karma_client_test.rb
 ```

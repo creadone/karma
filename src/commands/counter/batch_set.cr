@@ -7,7 +7,7 @@ module Karma
 
         series_name = directive.series_name
         if cluster.trees[series_name]?.nil?
-          preflight!(CounterTree::Tree.new, items)
+          preflight!(Karma::BucketedCounter::Store.new, items)
         end
 
         cluster.pick(series_name) do |tree|

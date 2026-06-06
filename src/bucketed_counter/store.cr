@@ -1,13 +1,13 @@
-module CounterTree
-  class Tree
+module Karma::BucketedCounter
+  class Store
     include MessagePack::Serializable
 
-    getter branches = [] of Hash(UInt64, CounterTree::Counter)
+    getter branches = [] of Hash(UInt64, Karma::BucketedCounter::Counter)
     getter branches_num : UInt32
 
     def initialize(@branches_num = 9)
       @branches = Array.new(@branches_num) do
-        Hash(UInt64, CounterTree::Counter).new
+        Hash(UInt64, Karma::BucketedCounter::Counter).new
       end
     end
 
@@ -111,11 +111,6 @@ module CounterTree
       true
     end
 
-    @[Deprecated("Use get_or_create(key) instead.")]
-    def pick(key : UInt64) : Counter
-      get_or_create(key)
-    end
-
     def get(key : UInt64) : Counter?
       index = branch_index(key)
       @branches[index][key]?
@@ -161,7 +156,7 @@ module CounterTree
     end
 
     def validate! : Bool
-      raise ArgumentError.new("tree branch count mismatch") unless @branches.size == @branches_num
+      raise ArgumentError.new("store branch count mismatch") unless @branches.size == @branches_num
 
       each_counter do |_, counter|
         counter.validate!

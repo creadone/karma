@@ -502,11 +502,12 @@ Developer documentation in Russian: [docs/development.ru.md](docs/development.ru
 
 ```sh
 crystal spec
-crystal spec lib/counter_tree/spec
+crystal spec spec/bucketed_counter
 shards build --release
 ```
 
-The `counter_tree` library is vendored in [lib/counter_tree](lib/counter_tree).
+The `Karma::BucketedCounter` data structure lives in [src/bucketed_counter.cr](src/bucketed_counter.cr)
+and [src/bucketed_counter](src/bucketed_counter).
 
 ## License
 

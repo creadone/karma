@@ -1,6 +1,4 @@
 /lib/*
-!/lib/counter_tree/
-!/lib/counter_tree/**
 /bin/
 /.shards/
 .DS_Store

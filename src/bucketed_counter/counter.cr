@@ -1,4 +1,4 @@
-module CounterTree
+module Karma::BucketedCounter
   class Counter
     include MessagePack::Serializable
 

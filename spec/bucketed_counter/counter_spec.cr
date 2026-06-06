@@ -1,9 +1,9 @@
-require "./spec_helper"
+require "../spec_helper"
 
-counter = CounterTree::Counter.new
+counter = Karma::BucketedCounter::Counter.new
 timestamps = [20230201, 20230202, 20230203, 20230204, 20230205]
 
-describe CounterTree do
+describe Karma::BucketedCounter do
   it "should return 1" do
     counter.reset
     result = counter.increment

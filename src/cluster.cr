@@ -1,8 +1,8 @@
-require "counter_tree"
+require "./bucketed_counter"
 
 module Karma
   class Cluster
-    alias ClusterType = Hash(String, CounterTree::Tree)
+    alias ClusterType = Hash(String, Karma::BucketedCounter::Store)
     getter trees : ClusterType
 
     def initialize
@@ -37,7 +37,7 @@ module Karma
       true
     end
 
-    def create(name : String) : CounterTree::Tree
+    def create(name : String) : Karma::BucketedCounter::Store
       find_or_create(name)
     end
 
@@ -49,11 +49,11 @@ module Karma
       yield find_or_create(name)
     end
 
-    def get(name : String) : CounterTree::Tree
+    def get(name : String) : Karma::BucketedCounter::Store
       @trees[name]? || raise Karma::Error.new("not_found", "Tree \"#{name}\" not found")
     end
 
-    def replace(name : String, tree : CounterTree::Tree) : Bool
+    def replace(name : String, tree : Karma::BucketedCounter::Store) : Bool
       @trees[name] = tree
       true
     end
@@ -73,9 +73,9 @@ module Karma
       true
     end
 
-    private def find_or_create(name : String) : CounterTree::Tree
+    private def find_or_create(name : String) : Karma::BucketedCounter::Store
       unless @trees.has_key?(name)
-        @trees[name] = CounterTree::Tree.new
+        @trees[name] = Karma::BucketedCounter::Store.new
       end
       @trees[name]
     end

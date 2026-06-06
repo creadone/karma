@@ -55,7 +55,7 @@ module Karma
             return Commands::BatchSet.apply(tree, items)
           end
         when "replace_series"
-          staged_tree = stream.staged_tree ||= CounterTree::Tree.new
+          staged_tree = stream.staged_tree ||= Karma::BucketedCounter::Store.new
           return Commands::BatchSet.apply(staged_tree, items)
         else
           raise Karma::Error.new("validation_error", "Unsupported ingest mode #{stream.mode}")

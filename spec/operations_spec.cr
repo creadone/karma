@@ -550,7 +550,7 @@ end
 describe Karma::Backup do
   it "validates restored counter invariants" do
     cluster = Karma::Cluster.new
-    tree = CounterTree::Tree.new
+    tree = Karma::BucketedCounter::Store.new
     counter = tree.get_or_create(42_u64)
     counter.insert(20230201_u64, 5_u64)
     counter.table[20230201_u64] = 7_u64
